@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="student_photos" path="photos/" />
+    <cache-path name="temp_photos" path="temp/" />
+    <external-files-path name="documents" path="Documents/" />
+    <external-files-path name="fee_reports" path="Documents/FeeReports/" />
+</paths>
+
+
