@@ -3,15 +3,12 @@ package com.navoditpublic.fees.presentation.screens.students.detail
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,7 +64,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -1065,29 +1061,18 @@ private fun PremiumActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
-        animationSpec = tween(100),
-        label = "scale"
-    )
-    
     Surface(
-        modifier = modifier
-            .scale(scale)
-            .height(52.dp),
-        shape = RoundedCornerShape(14.dp),
+        modifier = modifier.height(48.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (isPrimary) Saffron else Color.Transparent,
         border = if (!isPrimary) androidx.compose.foundation.BorderStroke(1.5.dp, Saffron) else null,
-        shadowElevation = if (isPrimary) 4.dp else 0.dp,
-        onClick = onClick,
-        interactionSource = interactionSource
+        shadowElevation = if (isPrimary) 2.dp else 0.dp,
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1095,9 +1080,9 @@ private fun PremiumActionButton(
                 icon,
                 contentDescription = null,
                 tint = if (isPrimary) Color.White else Saffron,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(6.dp))
             Text(
                 text,
                 style = MaterialTheme.typography.labelLarge,

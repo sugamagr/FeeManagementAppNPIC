@@ -14,7 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -62,29 +62,34 @@ class StudentDetailViewModel @Inject constructor(
                     return@launch
                 }
                 
-                // Load transport route if applicable
-                val transportRoute = student.transportRouteId?.let { 
-                    settingsRepository.getRouteById(it) 
+                // Parallelize all independent database calls using async
+                val transportRouteDeferred = async {
+                    student.transportRouteId?.let { settingsRepository.getRouteById(it) }
                 }
                 
-                // Load admission session name
-                val admissionSession = settingsRepository.getSessionById(student.admissionSessionId)
+                val admissionSessionDeferred = async {
+                    settingsRepository.getSessionById(student.admissionSessionId)
+                }
+                
+                val balanceDeferred = async {
+                    feeRepository.getCurrentBalance(studentId)
+                }
+                
+                val totalDebitsDeferred = async {
+                    feeRepository.getTotalDebits(studentId)
+                }
+                
+                val totalCreditsDeferred = async {
+                    feeRepository.getTotalCredits(studentId)
+                }
+                
+                // Await all results
+                val transportRoute = transportRouteDeferred.await()
+                val admissionSession = admissionSessionDeferred.await()
                 val admissionSessionName = admissionSession?.sessionName ?: ""
-                
-                // Get current session for proper dues calculation
-                val currentSession = settingsRepository.getCurrentSession()
-                val sessionId = currentSession?.id ?: 0L
-                
-                // Use ledger as single source of truth for all financial data
-                val balance = feeRepository.getCurrentBalance(studentId) // Current dues (all fees minus payments)
-                val totalDebits = feeRepository.getTotalDebits(studentId) // All fees charged
-                val totalCredits = feeRepository.getTotalCredits(studentId) // All payments made
-                
-                // Load recent receipts
-                val receipts = feeRepository.getReceiptsForStudent(studentId).first().take(5)
-                
-                // Load recent ledger entries
-                val ledgerEntries = feeRepository.getLedgerForStudent(studentId).first().takeLast(10).reversed()
+                val balance = balanceDeferred.await()
+                val totalDebits = totalDebitsDeferred.await()
+                val totalCredits = totalCreditsDeferred.await()
                 
                 _state.value = StudentDetailState(
                     isLoading = false,
@@ -94,9 +99,9 @@ class StudentDetailViewModel @Inject constructor(
                     totalCredits = totalCredits,
                     transportRoute = transportRoute,
                     admissionSessionName = admissionSessionName,
-                    recentReceipts = receipts,
-                    recentLedgerEntries = ledgerEntries,
-                    error = null  // Clear any previous error
+                    recentReceipts = emptyList(), // Removed - not displayed on screen
+                    recentLedgerEntries = emptyList(), // Removed - not displayed on screen
+                    error = null
                 )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(

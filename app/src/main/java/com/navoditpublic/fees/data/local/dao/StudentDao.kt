@@ -101,6 +101,9 @@ interface StudentDao {
     
     @Query("DELETE FROM students WHERE sr_number LIKE :prefix || '%'")
     suspend fun deleteBySrNumberPrefix(prefix: String)
+    
+    @Query("UPDATE students SET admission_fee_paid = :paid, updated_at = :updatedAt WHERE id = :studentId")
+    suspend fun updateAdmissionFeePaid(studentId: Long, paid: Boolean, updatedAt: Long = System.currentTimeMillis())
 }
 
 

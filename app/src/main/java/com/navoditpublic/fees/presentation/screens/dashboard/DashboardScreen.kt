@@ -263,7 +263,7 @@ fun DashboardScreen(
                                 title = "Transport",
                                 icon = Icons.Default.DirectionsBus,
                                 gradientColors = listOf(Color(0xFF7E57C2), Color(0xFF9575CD)),
-                                onClick = { navController.navigate(Screen.TransportQuick.route) },
+                                onClick = { navController.navigate(Screen.TransportQuick.createRoute()) },
                                 modifier = Modifier.weight(1f)
                             )
                         }

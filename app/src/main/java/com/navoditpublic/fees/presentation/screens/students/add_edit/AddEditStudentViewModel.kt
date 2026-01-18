@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.data.local.entity.AuditAction
 import com.navoditpublic.fees.data.local.entity.LedgerEntryType
 import com.navoditpublic.fees.data.local.entity.LedgerReferenceType
+import com.navoditpublic.fees.data.local.preferences.StudentDraft
+import com.navoditpublic.fees.data.local.preferences.StudentDraftManager
 import com.navoditpublic.fees.domain.model.AcademicSession
 import com.navoditpublic.fees.domain.model.AuditLog
 import com.navoditpublic.fees.domain.model.Student
@@ -18,6 +20,8 @@ import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
 import com.navoditpublic.fees.domain.repository.TransportEnrollmentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -51,6 +55,7 @@ data class SessionFeeBreakdown(
     val monthlyOrAnnualFeeLabel: String = "Monthly Fee",
     val totalMonthlyFee: Double = 0.0,
     val registrationFee: Double = 0.0,
+    val admissionFee: Double = 0.0,
     val transportFee: Double = 0.0,
     val transportMonths: Int = 0,
     val totalExpected: Double = 0.0
@@ -60,6 +65,15 @@ data class AddEditStudentState(
     val isLoading: Boolean = false,
     val isEditMode: Boolean = false,
     val studentId: Long? = null,
+    
+    // Draft state
+    val showDraftResumeDialog: Boolean = false,
+    val draftSummary: String = "",
+    val draftLastModified: Long = 0L,
+    val isDraftSaved: Boolean = false, // Shows "Draft saved" indicator briefly
+    
+    // Migration Mode - affects default values
+    val isMigrationMode: Boolean = false, // When ON, defaults "isNewAdmission" to false
     
     // Form fields
     val srNumber: String = "",
@@ -86,10 +100,14 @@ data class AddEditStudentState(
     // Opening Balance (for data migration)
     val openingBalance: String = "",
     val openingBalanceRemarks: String = "",
+    val currentYearPaidAmount: String = "", // Amount already paid this year (for migration)
     val showOpeningBalanceSection: Boolean = true, // Show for new students or editable for existing
     
-    // Admission Fee
-    val admissionFeePaid: Boolean = false,
+    // Admission Fee - Reworked logic
+    // isNewAdmission = true  → Apply admission fee (new student this year)
+    // isNewAdmission = false → Skip admission fee (already paid / continuing student)
+    val isNewAdmission: Boolean = true, // Default: new admission, charge admission fee
+    val admissionFeePaid: Boolean = false, // Legacy field for backward compatibility
     
     // Transport History
     val transportEnrollments: List<TransportEnrollmentUiEntry> = emptyList(),
@@ -135,7 +153,8 @@ class AddEditStudentViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val auditRepository: AuditRepository,
     private val transportEnrollmentRepository: TransportEnrollmentRepository,
-    private val feeRepository: FeeRepository
+    private val feeRepository: FeeRepository,
+    private val draftManager: StudentDraftManager
 ) : ViewModel() {
     
     private val studentIdArg: String? = savedStateHandle.get<String>("studentId")
@@ -149,6 +168,10 @@ class AddEditStudentViewModel @Inject constructor(
     
     private var originalStudent: Student? = null
     
+    // Draft auto-save job (debounced)
+    private var draftSaveJob: Job? = null
+    private var draftIndicatorJob: Job? = null
+    
     // Month names for display
     val monthNames = listOf(
         "April", "May", "June", "July", "August", "September",
@@ -157,6 +180,153 @@ class AddEditStudentViewModel @Inject constructor(
     
     init {
         loadInitialData()
+    }
+    
+    // ==================== DRAFT MANAGEMENT ====================
+    
+    /**
+     * Check for existing draft on screen load (only for new students)
+     */
+    private suspend fun checkForDraft() {
+        if (studentId != null) return // Don't check for drafts in edit mode
+        
+        val draft = draftManager.getDraft()
+        if (draft != null && draft.hasContent()) {
+            _state.value = _state.value.copy(
+                showDraftResumeDialog = true,
+                draftSummary = draft.getDisplaySummary(),
+                draftLastModified = draft.lastModified
+            )
+        }
+    }
+    
+    /**
+     * User chose to resume draft - load it into form
+     */
+    fun resumeDraft() {
+        viewModelScope.launch {
+            val draft = draftManager.getDraft() ?: return@launch
+            
+            _state.value = _state.value.copy(
+                showDraftResumeDialog = false,
+                isMigrationMode = draft.isMigrationMode,
+                srNumber = draft.srNumber,
+                accountNumber = draft.accountNumber,
+                name = draft.name,
+                fatherName = draft.fatherName,
+                motherName = draft.motherName,
+                phonePrimary = draft.phonePrimary,
+                phoneSecondary = draft.phoneSecondary,
+                addressLine1 = draft.addressLine1,
+                addressLine2 = draft.addressLine2,
+                district = draft.district,
+                state = draft.state,
+                pincode = draft.pincode,
+                currentClass = draft.currentClass,
+                section = draft.section,
+                admissionDate = draft.admissionDate,
+                hasTransport = draft.hasTransport,
+                transportRouteId = draft.transportRouteId,
+                openingBalance = draft.openingBalance,
+                openingBalanceRemarks = draft.openingBalanceRemarks,
+                currentYearPaidAmount = draft.currentYearPaidAmount,
+                isNewAdmission = draft.isNewAdmission,
+                admissionFeePaid = !draft.isNewAdmission, // Sync legacy field
+                feesReceivedMode = draft.feesReceivedMode,
+                feesReceivedAmount = draft.feesReceivedAmount,
+                monthsPaid = draft.monthsPaid
+            )
+            
+            // Recalculate fees if class is set
+            if (draft.currentClass.isNotBlank()) {
+                calculateSessionFees()
+            }
+        }
+    }
+    
+    /**
+     * User chose not to resume draft - discard it and start fresh
+     */
+    fun discardDraft() {
+        viewModelScope.launch {
+            draftManager.clearDraft()
+            _state.value = _state.value.copy(showDraftResumeDialog = false)
+        }
+    }
+    
+    /**
+     * Save current form state as draft (debounced - 500ms)
+     */
+    private fun scheduleDraftSave() {
+        // Don't save drafts in edit mode
+        if (_state.value.isEditMode) return
+        
+        draftSaveJob?.cancel()
+        draftSaveJob = viewModelScope.launch {
+            delay(500) // Debounce
+            saveDraftNow()
+        }
+    }
+    
+    /**
+     * Immediately save draft (called by debounce or on pause)
+     */
+    private suspend fun saveDraftNow() {
+        if (_state.value.isEditMode) return
+        
+        val currentState = _state.value
+        val draft = StudentDraft(
+            isMigrationMode = currentState.isMigrationMode,
+            srNumber = currentState.srNumber,
+            accountNumber = currentState.accountNumber,
+            name = currentState.name,
+            fatherName = currentState.fatherName,
+            motherName = currentState.motherName,
+            phonePrimary = currentState.phonePrimary,
+            phoneSecondary = currentState.phoneSecondary,
+            addressLine1 = currentState.addressLine1,
+            addressLine2 = currentState.addressLine2,
+            district = currentState.district,
+            state = currentState.state,
+            pincode = currentState.pincode,
+            currentClass = currentState.currentClass,
+            section = currentState.section,
+            admissionDate = currentState.admissionDate,
+            hasTransport = currentState.hasTransport,
+            transportRouteId = currentState.transportRouteId,
+            openingBalance = currentState.openingBalance,
+            openingBalanceRemarks = currentState.openingBalanceRemarks,
+            currentYearPaidAmount = currentState.currentYearPaidAmount,
+            isNewAdmission = currentState.isNewAdmission,
+            feesReceivedMode = currentState.feesReceivedMode,
+            feesReceivedAmount = currentState.feesReceivedAmount,
+            monthsPaid = currentState.monthsPaid
+        )
+        
+        // Only save if there's meaningful content
+        if (draft.hasContent()) {
+            draftManager.saveDraft(draft)
+            showDraftSavedIndicator()
+        }
+    }
+    
+    /**
+     * Show "Draft saved" indicator briefly
+     */
+    private fun showDraftSavedIndicator() {
+        draftIndicatorJob?.cancel()
+        draftIndicatorJob = viewModelScope.launch {
+            _state.value = _state.value.copy(isDraftSaved = true)
+            delay(2000) // Show for 2 seconds
+            _state.value = _state.value.copy(isDraftSaved = false)
+        }
+    }
+    
+    /**
+     * Clear draft after successful save
+     */
+    private suspend fun clearDraftAfterSave() {
+        draftManager.clearDraft()
     }
     
     private fun loadInitialData() {
@@ -181,6 +351,11 @@ class AddEditStudentViewModel @Inject constructor(
                     admissionDate = defaultAdmissionDate
                 )
                 
+                // Check for existing draft (only for new students)
+                if (studentId == null) {
+                    checkForDraft()
+                }
+                
                 // Load existing student if editing
                 if (studentId != null) {
                     val student = studentRepository.getById(studentId)
@@ -193,6 +368,7 @@ class AddEditStudentViewModel @Inject constructor(
                         _state.value = _state.value.copy(
                             isEditMode = true,
                             studentId = studentId,
+                            isMigrationMode = false, // Edit mode doesn't use migration mode
                             srNumber = student.srNumber,
                             accountNumber = student.accountNumber,
                             name = student.name,
@@ -213,7 +389,9 @@ class AddEditStudentViewModel @Inject constructor(
                             // Show opening balance without decimals since fees are always whole numbers
                             openingBalance = if (student.openingBalance > 0) student.openingBalance.toInt().toString() else "",
                             openingBalanceRemarks = student.openingBalanceRemarks,
+                            // Sync both fields - isNewAdmission is inverse of admissionFeePaid
                             admissionFeePaid = student.admissionFeePaid,
+                            isNewAdmission = !student.admissionFeePaid,
                             transportEnrollments = enrollments.map { it.toUiEntry() }
                         )
                         
@@ -266,6 +444,7 @@ class AddEditStudentViewModel @Inject constructor(
                 var monthlyOrAnnualFee = 0.0
                 var totalMonthlyFee = 0.0
                 var registrationFee = 0.0
+                var admissionFee = 0.0
                 var monthlyOrAnnualFeeLabel = "Monthly Fee"
                 
                 for (feeStructure in feeStructures) {
@@ -286,6 +465,12 @@ class AddEditStudentViewModel @Inject constructor(
                                 registrationFee = feeStructure.amount
                             }
                         }
+                        "admission" -> {
+                            // Only include admission fee if this is a new admission
+                            if (_state.value.isNewAdmission) {
+                                admissionFee = feeStructure.amount
+                            }
+                        }
                     }
                 }
                 
@@ -302,7 +487,7 @@ class AddEditStudentViewModel @Inject constructor(
                     transportFee = result.second
                 }
                 
-                val totalExpected = totalMonthlyFee + registrationFee + transportFee
+                val totalExpected = totalMonthlyFee + registrationFee + admissionFee + transportFee
                 
                 _state.value = _state.value.copy(
                     sessionFeeBreakdown = SessionFeeBreakdown(
@@ -310,6 +495,7 @@ class AddEditStudentViewModel @Inject constructor(
                         monthlyOrAnnualFeeLabel = monthlyOrAnnualFeeLabel,
                         totalMonthlyFee = totalMonthlyFee,
                         registrationFee = registrationFee,
+                        admissionFee = admissionFee,
                         transportFee = transportFee,
                         transportMonths = transportMonths,
                         totalExpected = totalExpected
@@ -365,62 +551,76 @@ class AddEditStudentViewModel @Inject constructor(
     // Update functions for each field
     fun updateSrNumber(value: String) {
         _state.value = _state.value.copy(srNumber = value.uppercase(), srNumberError = null)
+        scheduleDraftSave()
     }
     
     fun updateAccountNumber(value: String) {
         _state.value = _state.value.copy(accountNumber = value.uppercase(), accountNumberError = null)
+        scheduleDraftSave()
     }
     
     fun updateName(value: String) {
         _state.value = _state.value.copy(name = value, nameError = null)
+        scheduleDraftSave()
     }
     
     fun updateFatherName(value: String) {
         _state.value = _state.value.copy(fatherName = value, fatherNameError = null)
+        scheduleDraftSave()
     }
     
     fun updateMotherName(value: String) {
         _state.value = _state.value.copy(motherName = value)
+        scheduleDraftSave()
     }
     
     fun updatePhonePrimary(value: String) {
         val filtered = value.filter { it.isDigit() }.take(10)
         _state.value = _state.value.copy(phonePrimary = filtered, phonePrimaryError = null)
+        scheduleDraftSave()
     }
     
     fun updatePhoneSecondary(value: String) {
         val filtered = value.filter { it.isDigit() }.take(10)
         _state.value = _state.value.copy(phoneSecondary = filtered)
+        scheduleDraftSave()
     }
     
     fun updateAddressLine1(value: String) {
         _state.value = _state.value.copy(addressLine1 = value)
+        scheduleDraftSave()
     }
     
     fun updateAddressLine2(value: String) {
         _state.value = _state.value.copy(addressLine2 = value)
+        scheduleDraftSave()
     }
     
     fun updateDistrict(value: String) {
         _state.value = _state.value.copy(district = value)
+        scheduleDraftSave()
     }
     
     fun updateState(value: String) {
         _state.value = _state.value.copy(state = value)
+        scheduleDraftSave()
     }
     
     fun updatePincode(value: String) {
         val filtered = value.filter { it.isDigit() }.take(6)
         _state.value = _state.value.copy(pincode = filtered, pincodeError = null)
+        scheduleDraftSave()
     }
     
     fun updateClass(value: String) {
         _state.value = _state.value.copy(currentClass = value, classError = null)
         calculateSessionFees()
+        scheduleDraftSave()
     }
     
     fun updateSection(value: String) {
         _state.value = _state.value.copy(section = value)
+        scheduleDraftSave()
     }
     
     fun updateAdmissionDate(value: Long) {
@@ -441,6 +641,7 @@ class AddEditStudentViewModel @Inject constructor(
                 isBackdatedAdmission = isBackdated,
                 showBackdateWarning = isBackdated  // Show warning for backdated admissions
             )
+            scheduleDraftSave()
         }
     }
     
@@ -466,36 +667,75 @@ class AddEditStudentViewModel @Inject constructor(
             transportRouteId = if (!value) null else _state.value.transportRouteId
         )
         calculateSessionFees()
+        scheduleDraftSave()
     }
     
     fun updateTransportRoute(routeId: Long?) {
         _state.value = _state.value.copy(transportRouteId = routeId)
         calculateSessionFees()
+        scheduleDraftSave()
     }
     
     // Opening Balance functions
     fun updateOpeningBalance(value: String) {
         val filtered = value.filter { it.isDigit() || it == '.' }
         _state.value = _state.value.copy(openingBalance = filtered, openingBalanceError = null)
+        scheduleDraftSave()
     }
     
     fun updateOpeningBalanceRemarks(value: String) {
         _state.value = _state.value.copy(openingBalanceRemarks = value)
+        scheduleDraftSave()
     }
     
-    // Admission Fee
+    // Migration Mode - toggles default for new admission
+    fun updateMigrationMode(value: Boolean) {
+        _state.value = _state.value.copy(
+            isMigrationMode = value,
+            // When migration mode is ON, default isNewAdmission to false (already paid)
+            // When migration mode is OFF, default isNewAdmission to true (new student)
+            isNewAdmission = !value
+        )
+        scheduleDraftSave()
+    }
+    
+    // Admission Fee - New logic
+    fun updateIsNewAdmission(value: Boolean) {
+        _state.value = _state.value.copy(
+            isNewAdmission = value,
+            // Sync with legacy field (inverted: isNewAdmission=true means NOT paid yet)
+            admissionFeePaid = !value
+        )
+        calculateSessionFees() // Recalculate to include/exclude admission fee
+        scheduleDraftSave()
+    }
+    
+    // Legacy - kept for backward compatibility
     fun updateAdmissionFeePaid(value: Boolean) {
-        _state.value = _state.value.copy(admissionFeePaid = value)
+        _state.value = _state.value.copy(
+            admissionFeePaid = value,
+            isNewAdmission = !value
+        )
+        scheduleDraftSave()
+    }
+    
+    // Current Year Paid Amount (for migration)
+    fun updateCurrentYearPaidAmount(value: String) {
+        val filtered = value.filter { it.isDigit() || it == '.' }
+        _state.value = _state.value.copy(currentYearPaidAmount = filtered)
+        scheduleDraftSave()
     }
     
     // Fees Received functions
     fun updateFeesReceivedMode(mode: String) {
         _state.value = _state.value.copy(feesReceivedMode = mode)
+        scheduleDraftSave()
     }
     
     fun updateFeesReceivedAmount(value: String) {
         val filtered = value.filter { it.isDigit() || it == '.' }
         _state.value = _state.value.copy(feesReceivedAmount = filtered)
+        scheduleDraftSave()
     }
     
     fun toggleMonthPaid(monthIndex: Int) {
@@ -506,6 +746,7 @@ class AddEditStudentViewModel @Inject constructor(
             current.add(monthIndex)
         }
         _state.value = _state.value.copy(monthsPaid = current)
+        scheduleDraftSave()
     }
     
     fun getCalculatedFeesReceived(): Double {
@@ -642,6 +883,11 @@ class AddEditStudentViewModel @Inject constructor(
                 val openingBalanceAmount = _state.value.openingBalance.toDoubleOrNull() ?: 0.0
                 val openingBalanceDate = currentSession?.startDate
                 
+                // Admission fee logic:
+                // isNewAdmission = true  → admissionFeePaid = false (will be charged)
+                // isNewAdmission = false → admissionFeePaid = true (already paid / continuing)
+                val shouldChargeAdmissionFee = _state.value.isNewAdmission
+                
                 val student = Student(
                     id = studentId ?: 0,
                     srNumber = _state.value.srNumber.trim(),
@@ -665,7 +911,8 @@ class AddEditStudentViewModel @Inject constructor(
                     openingBalance = openingBalanceAmount,
                     openingBalanceRemarks = _state.value.openingBalanceRemarks.trim(),
                     openingBalanceDate = openingBalanceDate,
-                    admissionFeePaid = _state.value.admissionFeePaid
+                    // If isNewAdmission=true, we set admissionFeePaid=false so fee gets applied
+                    admissionFeePaid = !shouldChargeAdmissionFee
                 )
                 
                 if (_state.value.isEditMode) {
@@ -682,6 +929,7 @@ class AddEditStudentViewModel @Inject constructor(
                             oldValue = originalStudent?.name,
                             newValue = student.name
                         )
+                        clearDraftAfterSave()
                         _events.emit(AddEditStudentEvent.Success)
                     }.onFailure { e ->
                         _events.emit(AddEditStudentEvent.Error(e.message ?: "Failed to update student"))
@@ -712,15 +960,16 @@ class AddEditStudentViewModel @Inject constructor(
                             )
                         }
                         
-                        // Create initial ledger entry for fees received if any (data migration - CREDIT entry)
-                        val feesReceived = getCalculatedFeesReceived()
-                        if (feesReceived > 0 && currentSession != null) {
+                        // Create initial ledger entry for current year payments (migration mode - CREDIT entry)
+                        val currentYearPaid = _state.value.currentYearPaidAmount.toDoubleOrNull() ?: 0.0
+                        
+                        if (currentYearPaid > 0 && currentSession != null) {
                             feeRepository.createInitialPaymentEntry(
                                 studentId = newId,
                                 sessionId = sessionId,
-                                amount = feesReceived,
+                                amount = currentYearPaid,
                                 date = currentSession.startDate ?: System.currentTimeMillis(),
-                                description = "Fees received (data migration)"
+                                description = "Fees received (data migration - current session)"
                             )
                         }
                         
@@ -730,6 +979,7 @@ class AddEditStudentViewModel @Inject constructor(
                             entityId = newId,
                             entityName = student.name
                         )
+                        clearDraftAfterSave()
                         _events.emit(AddEditStudentEvent.Success)
                     }.onFailure { e ->
                         val errorMsg = when {

@@ -577,6 +577,9 @@ class FeeRepositoryImpl @Inject constructor(
                 )
                 ledgerDao.insert(ledgerEntry)
                 totalFeesAdded += admissionFee.amount
+                
+                // Mark admission fee as paid to prevent duplicate charges
+                studentDao.updateAdmissionFeePaid(studentId, true)
             }
         }
         
