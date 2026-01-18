@@ -786,10 +786,13 @@ private fun StudentSelectionFullScreen(
         }
     }
     
+    // Track if we're actively searching (query >= 2 chars)
+    val isSearching = searchQuery.length >= 2
+    
     // Determine which students to show (search takes priority)
-    val studentsToShow = remember(searchQuery, searchResults, filteredByClass, sortOption, selectedClassSection) {
-        val baseList = if (searchQuery.length >= 2 && searchResults.isNotEmpty()) {
-            // When searching, filter search results by class if selected
+    val studentsToShow = remember(searchQuery, searchResults, filteredByClass, sortOption, selectedClassSection, isSearching) {
+        val baseList = if (isSearching) {
+            // When searching, use search results (even if empty - to show "no results" state)
             if (selectedClassSection != null) {
                 searchResults.filter { it.student.classSection == selectedClassSection }
             } else {
@@ -1015,12 +1018,23 @@ private fun StudentSelectionFullScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            if (searchQuery.length >= 2) "No students found" 
-                            else if (selectedClassSection != null) "No students in $selectedClassSection"
-                            else "No students available",
+                            when {
+                                isSearching -> "No students found for \"$searchQuery\""
+                                selectedClassSection != null -> "No students in $selectedClassSection"
+                                else -> "No students available"
+                            },
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
+                        if (isSearching) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Try a different search term",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
             }
@@ -2880,6 +2894,8 @@ private fun StudentSelectionSheet(
     allStudents: List<StudentWithBalance>,
     onStudentSelected: (StudentWithBalance) -> Unit
 ) {
+    val isSearching = searchQuery.length >= 2
+    
     Column(
         Modifier
             .fillMaxWidth()
@@ -2905,33 +2921,70 @@ private fun StudentSelectionSheet(
             Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            if (searchQuery.length >= 2 && searchResults.isNotEmpty()) {
+            if (isSearching) {
+                // Show search results section when actively searching
                 item {
                     Text(
-                        "SEARCH RESULTS",
+                        "SEARCH RESULTS (${searchResults.size})",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = Saffron,
                         letterSpacing = 1.sp
                     )
                 }
-                items(searchResults) { student ->
-                    StudentListItem(student, onStudentSelected)
+                
+                if (searchResults.isEmpty()) {
+                    // No results found
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "No students found for \"$searchQuery\"",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Try a different search term",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                } else {
+                    items(searchResults) { student ->
+                        StudentListItem(student, onStudentSelected)
+                    }
                 }
                 item { Spacer(Modifier.height(12.dp)) }
             }
             
-            item {
-                Text(
-                    "ALL STUDENTS",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 1.sp
-                )
-            }
-            items(allStudents) { student ->
-                StudentListItem(student, onStudentSelected)
+            // Show all students only when not searching
+            if (!isSearching) {
+                item {
+                    Text(
+                        "ALL STUDENTS",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        letterSpacing = 1.sp
+                    )
+                }
+                items(allStudents) { student ->
+                    StudentListItem(student, onStudentSelected)
+                }
             }
             item { Spacer(Modifier.height(32.dp)) }
         }
