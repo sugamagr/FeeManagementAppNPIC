@@ -77,11 +77,9 @@ class LedgerMainViewModel @Inject constructor(
                     var classStudentsWithDues = 0
                     
                     for (student in students) {
-                        val dues = feeRepository.calculateExpectedSessionDues(student.id, sessionId)
-                        val paid = feeRepository.getTotalPaymentsForSession(student.id, sessionId)
-                        
-                        // Add opening balance to dues
-                        val totalDue = dues + student.openingBalance
+                        // Ledger balance includes all fees (opening balance, tuition, transport, admission) minus payments
+                        val totalDue = feeRepository.getCurrentBalance(student.id)
+                        val paid = feeRepository.getTotalCredits(student.id)
                         
                         classDues += totalDue
                         classPaid += paid

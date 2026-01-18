@@ -10,7 +10,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,6 +40,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachMoney
@@ -50,7 +50,9 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
@@ -60,7 +62,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -102,7 +103,6 @@ import com.navoditpublic.fees.presentation.theme.SaffronDark
 import com.navoditpublic.fees.presentation.theme.SaffronLight
 import com.navoditpublic.fees.util.DateUtils
 import com.navoditpublic.fees.util.toRupees
-import kotlinx.coroutines.delay
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
@@ -130,175 +130,226 @@ fun FeeCollectionScreen(
     
     LaunchedEffect(state.isLoading) {
         if (!state.isLoading) {
-            delay(100)
             animateStats = true
         }
     }
     
-    Scaffold(
-        containerColor = SurfaceWhite,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { navController.navigate(Screen.CollectFee.createRoute()) },
-                containerColor = Saffron,
-                contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier
-                    .size(64.dp)
-                    .shadow(12.dp, CircleShape, spotColor = Saffron.copy(alpha = 0.4f))
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "New Receipt",
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
-    ) { paddingValues ->
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SurfaceWhite)
+    ) {
         if (state.isLoading) {
-            LoadingScreen(modifier = Modifier.padding(paddingValues))
+            LoadingScreen()
         } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentPadding = PaddingValues(bottom = 100.dp)
-            ) {
-                // Hero Header
-                item {
-                    HeroHeader(
-                        todayCollection = state.todayCollection,
-                        yesterdayCollection = state.yesterdayCollection,
-                        todayCount = state.todayReceiptCount,
-                        weekCollection = state.weekCollection,
-                        monthCollection = state.monthCollection,
-                        animateStats = animateStats
-                    )
-                }
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Fixed Header with back button
+                ScreenHeader(
+                    onBackClick = { navController.popBackStack() }
+                )
+                
+                // Scrollable content
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 100.dp)
+                ) {
+                    // Hero Stats Card
+                    item {
+                        HeroStatsCard(
+                            todayCollection = state.todayCollection,
+                            yesterdayCollection = state.yesterdayCollection,
+                            todayCount = state.todayReceiptCount,
+                            weekCollection = state.weekCollection,
+                            monthCollection = state.monthCollection,
+                            animateStats = animateStats
+                        )
+                    }
                 
                 // Search Bar
                 item {
-                    AnimatedVisibility(
-                        visible = animateStats,
-                        enter = fadeIn(tween(400, 200)) + slideInVertically(tween(400, 200)) { 30 }
-                    ) {
-                        PremiumSearchBar(
-                            query = state.searchQuery,
-                            onQueryChange = viewModel::updateSearchQuery,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
+                    PremiumSearchBar(
+                        query = state.searchQuery,
+                        onQueryChange = viewModel::updateSearchQuery,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
                 
                 // Tab Bar
                 item {
-                    AnimatedVisibility(
-                        visible = animateStats,
-                        enter = fadeIn(tween(400, 250)) + slideInVertically(tween(400, 250)) { 30 }
-                    ) {
-                        ReceiptTabBar(
-                            selectedTab = state.selectedTab,
-                            onTabSelected = viewModel::selectTab,
-                            todayCount = state.todayReceiptCount,
-                            weekCount = state.weekReceiptCount,
-                            monthCount = state.monthReceiptCount,
-                            totalCount = state.allReceipts.size,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
+                    ReceiptTabBar(
+                        selectedTab = state.selectedTab,
+                        onTabSelected = viewModel::selectTab,
+                        todayCount = state.todayReceiptCount,
+                        weekCount = state.weekReceiptCount,
+                        monthCount = state.monthReceiptCount,
+                        totalCount = state.allReceipts.size,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
                 
                 // Quick Filters
                 item {
-                    AnimatedVisibility(
-                        visible = animateStats,
-                        enter = fadeIn(tween(400, 300)) + slideInVertically(tween(400, 300)) { 30 }
-                    ) {
-                        QuickFilters(
-                            paymentFilter = state.paymentFilter,
-                            onPaymentFilterChange = viewModel::updatePaymentFilter,
-                            statusFilter = state.statusFilter,
-                            onStatusFilterChange = viewModel::updateStatusFilter,
-                            cashCount = state.cashCount,
-                            onlineCount = state.onlineCount,
-                            cancelledCount = state.cancelledCount,
-                            onClearFilters = viewModel::clearFilters,
-                            hasActiveFilters = state.paymentFilter != PaymentFilter.ALL || 
-                                              state.statusFilter != StatusFilter.ALL ||
-                                              state.searchQuery.isNotBlank(),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                        )
-                    }
+                    QuickFilters(
+                        paymentFilter = state.paymentFilter,
+                        onPaymentFilterChange = viewModel::updatePaymentFilter,
+                        statusFilter = state.statusFilter,
+                        onStatusFilterChange = viewModel::updateStatusFilter,
+                        cashCount = state.cashCount,
+                        onlineCount = state.onlineCount,
+                        cancelledCount = state.cancelledCount,
+                        availableClasses = state.availableClasses,
+                        selectedClass = state.selectedClass,
+                        onClassFilterChange = viewModel::updateClassFilter,
+                        onClearFilters = viewModel::clearFilters,
+                        hasActiveFilters = state.paymentFilter != PaymentFilter.ALL || 
+                                          state.statusFilter != StatusFilter.ALL ||
+                                          state.searchQuery.isNotBlank() ||
+                                          state.selectedClass != null,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
                 }
                 
                 // Results Count
                 item {
-                    AnimatedVisibility(
-                        visible = animateStats,
-                        enter = fadeIn(tween(400, 350))
-                    ) {
-                        ResultsCount(
-                            filteredCount = state.filteredReceipts.size,
-                            totalCount = state.allReceipts.size,
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
-                        )
-                    }
+                    ResultsCount(
+                        filteredCount = state.filteredReceipts.size,
+                        totalCount = state.allReceipts.size,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                    )
                 }
                 
                 // Receipts List
                 if (state.filteredReceipts.isEmpty()) {
                     item {
-                        AnimatedVisibility(
-                            visible = animateStats,
-                            enter = fadeIn(tween(400, 400))
-                        ) {
-                            EmptyState(
-                                icon = Icons.Default.Receipt,
-                                title = if (state.searchQuery.isNotBlank() || 
-                                           state.paymentFilter != PaymentFilter.ALL ||
-                                           state.statusFilter != StatusFilter.ALL) 
-                                    "No Results" else "No Receipts",
-                                subtitle = if (state.searchQuery.isNotBlank()) 
-                                    "Try a different search" 
-                                else "Create your first receipt with the + button",
-                                modifier = Modifier.padding(32.dp)
-                            )
-                        }
+                        EmptyState(
+                            icon = Icons.Default.Receipt,
+                            title = if (state.searchQuery.isNotBlank() || 
+                                       state.paymentFilter != PaymentFilter.ALL ||
+                                       state.statusFilter != StatusFilter.ALL) 
+                                "No Results" else "No Receipts",
+                            subtitle = if (state.searchQuery.isNotBlank()) 
+                                "Try a different search" 
+                            else "Create your first receipt with the + button",
+                            modifier = Modifier.padding(32.dp)
+                        )
                     }
                 } else {
                     itemsIndexed(
                         items = state.filteredReceipts,
                         key = { _, receipt -> receipt.receipt.id }
-                    ) { index, receiptWithStudent ->
-                        AnimatedVisibility(
-                            visible = animateStats,
-                            enter = fadeIn(tween(300, 400 + (index * 30).coerceAtMost(300))) + 
-                                   slideInVertically(tween(300, 400 + (index * 30).coerceAtMost(300))) { 40 }
-                        ) {
-                            PremiumReceiptCard(
-                                receiptWithStudent = receiptWithStudent,
-                                onClick = {
-                                    navController.navigate(Screen.ReceiptDetail.createRoute(receiptWithStudent.receipt.id))
-                                },
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                            )
-                        }
+                    ) { _, receiptWithStudent ->
+                        PremiumReceiptCard(
+                            receiptWithStudent = receiptWithStudent,
+                            onClick = {
+                                navController.navigate(Screen.ReceiptDetail.createRoute(receiptWithStudent.receipt.id))
+                            },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                        )
                     }
                 }
                 
-                // Bottom spacing
-                item { Spacer(Modifier.height(16.dp)) }
+                    // Bottom spacing
+                    item { Spacer(Modifier.height(16.dp)) }
+                }
+            }
+        }
+        
+        // FAB
+        FloatingActionButton(
+            onClick = { navController.navigate(Screen.CollectFee.createRoute()) },
+            containerColor = Saffron,
+            contentColor = Color.White,
+            shape = CircleShape,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(24.dp)
+                .size(64.dp)
+                .shadow(12.dp, CircleShape, spotColor = Saffron.copy(alpha = 0.4f))
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "New Receipt",
+                modifier = Modifier.size(28.dp)
+            )
+        }
+    }
+}
+
+// ============================================================================
+// SCREEN HEADER - Compact App Bar with Back Button
+// ============================================================================
+
+@Composable
+private fun ScreenHeader(
+    onBackClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = Saffron,
+        shadowElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Back button
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color.White
+                )
+            }
+            
+            // Title
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White.copy(alpha = 0.2f),
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Receipt,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+                
+                Spacer(Modifier.width(12.dp))
+                
+                Column {
+                    Text(
+                        text = "Receipt Hub",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Manage all fee receipts",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
             }
         }
     }
 }
 
 // ============================================================================
-// HERO HEADER
+// HERO STATS CARD
 // ============================================================================
 
 @Composable
-private fun HeroHeader(
+private fun HeroStatsCard(
     todayCollection: Double,
     yesterdayCollection: Double,
     todayCount: Int,
@@ -309,7 +360,7 @@ private fun HeroHeader(
     val animatedProgress = remember { Animatable(0f) }
     LaunchedEffect(animateStats) {
         if (animateStats) {
-            animatedProgress.animateTo(1f, tween(800, easing = FastOutSlowInEasing))
+            animatedProgress.animateTo(1f, tween(400, easing = FastOutSlowInEasing))
         }
     }
     
@@ -319,165 +370,116 @@ private fun HeroHeader(
     } else if (todayCollection > 0) 100.0 else 0.0
     val isPositive = percentChange >= 0
     
-    Box(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(HeroGradientStart, HeroGradientEnd)
-                )
-            )
+            .padding(16.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
-        // Decorative circles
-        Box(
-            modifier = Modifier
-                .size(120.dp)
-                .offset(x = 280.dp, y = (-20).dp)
-                .background(Color.White.copy(alpha = 0.08f), CircleShape)
-        )
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .offset(x = (-30).dp, y = 100.dp)
-                .background(Color.White.copy(alpha = 0.06f), CircleShape)
-        )
-        
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(20.dp)
-        ) {
-            // Title
-            Text(
-                text = "Receipt Hub",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-            
-            Spacer(Modifier.height(4.dp))
-            
-            Text(
-                text = "Manage all your fee receipts",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.85f)
-            )
-            
-            Spacer(Modifier.height(20.dp))
-            
-            // Hero Card
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(16.dp, RoundedCornerShape(20.dp), spotColor = Color.Black.copy(alpha = 0.2f)),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+        Column(modifier = Modifier.padding(20.dp)) {
+            // Today's Collection
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    // Today's Collection
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Column {
-                            Text(
-                                text = "Today's Collection",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Color.Gray
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            AnimatedContent(
-                                targetState = displayAmount,
-                                transitionSpec = {
-                                    fadeIn(tween(200)) togetherWith fadeOut(tween(200))
-                                },
-                                label = "amount"
-                            ) { amount ->
-                                Text(
-                                    text = "₹${String.format("%,.0f", amount)}",
-                                    style = MaterialTheme.typography.headlineLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.Black
-                                )
-                            }
-                            
-                            Spacer(Modifier.height(6.dp))
-                            
-                            // Change badge
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isPositive) CashGreenLight else CancelledRedLight
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.TrendingUp,
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .size(14.dp)
-                                            .graphicsLayer { rotationZ = if (isPositive) 0f else 180f },
-                                        tint = if (isPositive) CashGreen else CancelledRed
-                                    )
-                                    Spacer(Modifier.width(4.dp))
-                                    Text(
-                                        text = "${if (isPositive) "+" else ""}${String.format("%.1f", percentChange)}% vs yesterday",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isPositive) CashGreen else CancelledRed
-                                    )
-                                }
-                            }
-                        }
-                        
-                        // Receipt count badge
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Saffron.copy(alpha = 0.1f)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = todayCount.toString(),
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Saffron
-                                )
-                                Text(
-                                    text = "Receipts",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = SaffronDark
-                                )
-                            }
-                        }
+                Column {
+                    Text(
+                        text = "Today's Collection",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.Gray
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    AnimatedContent(
+                        targetState = displayAmount,
+                        transitionSpec = {
+                            fadeIn(tween(200)) togetherWith fadeOut(tween(200))
+                        },
+                        label = "amount"
+                    ) { amount ->
+                        Text(
+                            text = "₹${String.format("%,.0f", amount)}",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Saffron
+                        )
                     }
                     
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(6.dp))
                     
-                    // Week/Month stats
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    // Change badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isPositive) CashGreenLight else CancelledRedLight
                     ) {
-                        MiniStatCard(
-                            label = "This Week",
-                            value = weekCollection.toRupees(),
-                            color = OnlineBlue,
-                            modifier = Modifier.weight(1f)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.TrendingUp,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .graphicsLayer { rotationZ = if (isPositive) 0f else 180f },
+                                tint = if (isPositive) CashGreen else CancelledRed
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = "${if (isPositive) "+" else ""}${String.format("%.1f", percentChange)}% vs yesterday",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isPositive) CashGreen else CancelledRed
+                            )
+                        }
+                    }
+                }
+                
+                // Receipt count badge
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Saffron.copy(alpha = 0.1f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = todayCount.toString(),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Saffron
                         )
-                        MiniStatCard(
-                            label = "This Month",
-                            value = monthCollection.toRupees(),
-                            color = Color(0xFF8B5CF6),
-                            modifier = Modifier.weight(1f)
+                        Text(
+                            text = "Receipts",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SaffronDark
                         )
                     }
                 }
+            }
+            
+            Spacer(Modifier.height(16.dp))
+            
+            // Week/Month stats
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MiniStatCard(
+                    label = "This Week",
+                    value = weekCollection.toRupees(),
+                    color = OnlineBlue,
+                    modifier = Modifier.weight(1f)
+                )
+                MiniStatCard(
+                    label = "This Month",
+                    value = monthCollection.toRupees(),
+                    color = Color(0xFF8B5CF6),
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -694,69 +696,102 @@ private fun QuickFilters(
     cashCount: Int,
     onlineCount: Int,
     cancelledCount: Int,
+    availableClasses: List<String>,
+    selectedClass: String?,
+    onClassFilterChange: (String?) -> Unit,
     onClearFilters: () -> Unit,
     hasActiveFilters: Boolean,
     modifier: Modifier = Modifier
 ) {
+    var showClassDropdown by remember { mutableStateOf(false) }
+    
     Column(modifier = modifier) {
+        // First row: Class filter + Clear button
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.Tune,
-                contentDescription = null,
-                tint = Color.Gray,
-                modifier = Modifier.size(18.dp)
-            )
-            
-            // Payment filters
-            FilterChip(
-                label = "Cash",
-                count = cashCount,
-                icon = Icons.Default.Money,
-                isSelected = paymentFilter == PaymentFilter.CASH,
-                color = CashGreen,
-                onClick = {
-                    onPaymentFilterChange(
-                        if (paymentFilter == PaymentFilter.CASH) PaymentFilter.ALL else PaymentFilter.CASH
-                    )
-                }
-            )
-            
-            FilterChip(
-                label = "Online",
-                count = onlineCount,
-                icon = Icons.Default.CreditCard,
-                isSelected = paymentFilter == PaymentFilter.ONLINE,
-                color = OnlineBlue,
-                onClick = {
-                    onPaymentFilterChange(
-                        if (paymentFilter == PaymentFilter.ONLINE) PaymentFilter.ALL else PaymentFilter.ONLINE
-                    )
-                }
-            )
-            
-            // Status filter
-            if (cancelledCount > 0) {
-                FilterChip(
-                    label = "Cancelled",
-                    count = cancelledCount,
-                    icon = Icons.Default.Cancel,
-                    isSelected = statusFilter == StatusFilter.CANCELLED,
-                    color = CancelledRed,
-                    onClick = {
-                        onStatusFilterChange(
-                            if (statusFilter == StatusFilter.CANCELLED) StatusFilter.ALL else StatusFilter.CANCELLED
-                        )
-                    }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Tune,
+                    contentDescription = null,
+                    tint = Color.Gray,
+                    modifier = Modifier.size(18.dp)
                 )
+                
+                // Class filter dropdown
+                if (availableClasses.isNotEmpty()) {
+                    Box {
+                        ClassFilterChip(
+                            selectedClass = selectedClass,
+                            onClick = { showClassDropdown = true }
+                        )
+                        
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showClassDropdown,
+                            onDismissRequest = { showClassDropdown = false }
+                        ) {
+                            // All Classes option
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { 
+                                    Text(
+                                        "All Classes",
+                                        fontWeight = if (selectedClass == null) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = {
+                                    onClassFilterChange(null)
+                                    showClassDropdown = false
+                                },
+                                leadingIcon = if (selectedClass == null) {
+                                    {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = Saffron,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                } else null
+                            )
+                            
+                            androidx.compose.material3.HorizontalDivider()
+                            
+                            // Class options
+                            availableClasses.forEach { className ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { 
+                                        Text(
+                                            className,
+                                            fontWeight = if (selectedClass == className) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        onClassFilterChange(className)
+                                        showClassDropdown = false
+                                    },
+                                    leadingIcon = if (selectedClass == className) {
+                                        {
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = Saffron,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    } else null
+                                )
+                            }
+                        }
+                    }
+                }
             }
             
-            Spacer(Modifier.weight(1f))
-            
-            // Clear filters
+            // Clear filters button
             AnimatedVisibility(visible = hasActiveFilters) {
                 Surface(
                     onClick = onClearFilters,
@@ -764,7 +799,7 @@ private fun QuickFilters(
                     color = Color.Transparent
                 ) {
                     Text(
-                        text = "Clear",
+                        text = "Clear All",
                         style = MaterialTheme.typography.labelMedium,
                         color = Saffron,
                         fontWeight = FontWeight.SemiBold,
@@ -772,6 +807,109 @@ private fun QuickFilters(
                     )
                 }
             }
+        }
+        
+        Spacer(Modifier.height(8.dp))
+        
+        // Second row: Payment and status filters
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Payment filters
+            item {
+                FilterChip(
+                    label = "Cash",
+                    count = cashCount,
+                    icon = Icons.Default.Money,
+                    isSelected = paymentFilter == PaymentFilter.CASH,
+                    color = CashGreen,
+                    onClick = {
+                        onPaymentFilterChange(
+                            if (paymentFilter == PaymentFilter.CASH) PaymentFilter.ALL else PaymentFilter.CASH
+                        )
+                    }
+                )
+            }
+            
+            item {
+                FilterChip(
+                    label = "Online",
+                    count = onlineCount,
+                    icon = Icons.Default.CreditCard,
+                    isSelected = paymentFilter == PaymentFilter.ONLINE,
+                    color = OnlineBlue,
+                    onClick = {
+                        onPaymentFilterChange(
+                            if (paymentFilter == PaymentFilter.ONLINE) PaymentFilter.ALL else PaymentFilter.ONLINE
+                        )
+                    }
+                )
+            }
+            
+            // Status filter
+            if (cancelledCount > 0) {
+                item {
+                    FilterChip(
+                        label = "Cancelled",
+                        count = cancelledCount,
+                        icon = Icons.Default.Cancel,
+                        isSelected = statusFilter == StatusFilter.CANCELLED,
+                        color = CancelledRed,
+                        onClick = {
+                            onStatusFilterChange(
+                                if (statusFilter == StatusFilter.CANCELLED) StatusFilter.ALL else StatusFilter.CANCELLED
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClassFilterChip(
+    selectedClass: String?,
+    onClick: () -> Unit
+) {
+    val isFiltered = selectedClass != null
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isFiltered) Saffron else Color.White,
+        animationSpec = tween(200),
+        label = "classBg"
+    )
+    
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = backgroundColor,
+        shadowElevation = if (isFiltered) 2.dp else 0.dp,
+        border = if (!isFiltered) androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f)) else null
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.School,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (isFiltered) Color.White else Saffron
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = selectedClass ?: "All Classes",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = if (isFiltered) Color.White else Color.DarkGray
+            )
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (isFiltered) Color.White else Color.Gray
+            )
         }
     }
 }

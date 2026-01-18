@@ -122,16 +122,18 @@ class CustomDuesReportViewModel @Inject constructor(
                 val allStudents = studentRepository.getAllActiveStudents().first()
                 
                 val studentDataList = allStudents.map { student ->
-                    val expectedFee = feeRepository.calculateExpectedSessionDues(student.id, sessionId) + student.openingBalance
-                    val paidAmount = feeRepository.getTotalPaymentsForSession(student.id, sessionId)
+                    // Use ledger as single source of truth
+                    val totalDebits = feeRepository.getTotalDebits(student.id) // All fees charged
+                    val paidAmount = feeRepository.getTotalCredits(student.id) // All payments
+                    val netDues = feeRepository.getCurrentBalance(student.id) // Current balance owed
                     val route = routes.find { it.id == student.transportRouteId }
                     
                     DuesReportStudentData(
                         student = student,
-                        expectedFee = expectedFee + paidAmount,
+                        expectedFee = totalDebits,
                         paidAmount = paidAmount,
-                        openingBalance = student.openingBalance,
-                        netDues = expectedFee,
+                        openingBalance = student.openingBalance, // For display purposes
+                        netDues = netDues,
                         transportRouteName = route?.routeName,
                         // Use class-based transport fee, 11 months (June excluded)
                         transportFee = route?.getFeeForClass(student.currentClass)?.times(11) ?: 0.0

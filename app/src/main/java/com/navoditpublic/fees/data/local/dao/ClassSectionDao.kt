@@ -50,6 +50,18 @@ interface ClassSectionDao {
     
     @Query("DELETE FROM class_sections WHERE class_name = :className AND section_name = :sectionName")
     suspend fun deleteSection(className: String, sectionName: String)
+    
+    @Query("SELECT COUNT(*) FROM students WHERE current_class = :className AND is_active = 1")
+    suspend fun getStudentCountInClass(className: String): Int
+    
+    @Query("SELECT COUNT(*) FROM students WHERE is_active = 1")
+    suspend fun getTotalStudentCount(): Int
+    
+    @Query("SELECT COUNT(*) FROM students WHERE is_active = 1")
+    fun getTotalStudentCountFlow(): Flow<Int>
+    
+    @Query("SELECT COUNT(*) FROM class_sections WHERE is_active = 1")
+    suspend fun getTotalSectionCount(): Int
 }
 
 

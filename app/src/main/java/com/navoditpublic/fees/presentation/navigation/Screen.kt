@@ -59,10 +59,11 @@ sealed class Screen(val route: String) {
     // action: "manage" for enrolled students (shows Change/Stop/History), "enroll" for students without transport
     data object TransportQuick : Screen("transport_quick?studentId={studentId}&action={action}") {
         fun createRoute(studentId: Long? = null, action: String? = null): String {
-            val params = mutableListOf<String>()
-            if (studentId != null) params.add("studentId=$studentId")
-            if (action != null) params.add("action=$action")
-            return if (params.isNotEmpty()) "transport_quick?${params.joinToString("&")}" else "transport_quick"
+            // Always include both parameters to match the route pattern
+            // Use defaults that match NavGraph argument defaults (-1L for studentId, "" for action)
+            val studentIdParam = studentId ?: -1L
+            val actionParam = action ?: ""
+            return "transport_quick?studentId=$studentIdParam&action=$actionParam"
         }
     }
     

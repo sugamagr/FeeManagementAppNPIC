@@ -198,9 +198,10 @@ class CustomReportViewModel @Inject constructor(
     
     private suspend fun loadAllFinancials(students: List<Student>): Map<Long, StudentFinancials> {
         return students.associate { student ->
-            val expectedDues = feeRepository.calculateExpectedSessionDues(student.id, currentSessionId)
-            val totalPaid = feeRepository.getTotalPaymentsForSession(student.id, currentSessionId)
-            val sessionFees = expectedDues + totalPaid
+            // Use ledger as single source of truth
+            val sessionFees = feeRepository.getTotalDebits(student.id) // All fees charged (opening balance, tuition, transport, admission)
+            val totalPaid = feeRepository.getTotalCredits(student.id) // All payments
+            val dues = feeRepository.getCurrentBalance(student.id) // Current balance owed
             val lastPayment = feeRepository.getLastPaymentDate(student.id, currentSessionId)
             val paymentsCount = feeRepository.getPaymentsCount(student.id, currentSessionId)
             val rate = if (sessionFees > 0) ((totalPaid / sessionFees) * 100).toFloat() else 100f
@@ -209,7 +210,7 @@ class CustomReportViewModel @Inject constructor(
                 studentId = student.id,
                 sessionFees = sessionFees,
                 totalPaid = totalPaid,
-                dues = expectedDues,
+                dues = dues,
                 collectionRate = rate.coerceIn(0f, 100f),
                 lastPaymentDate = lastPayment,
                 paymentsCount = paymentsCount

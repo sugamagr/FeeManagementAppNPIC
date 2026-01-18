@@ -121,7 +121,8 @@ class DefaultersViewModel @Inject constructor(
                 val defaultersList = mutableListOf<DefaulterInfo>()
                 
                 for (student in allStudents) {
-                    val expectedDues = feeRepository.calculateExpectedSessionDues(student.id, sessionId)
+                    // Use ledger balance - includes all fees (opening balance, tuition, transport, admission) minus payments
+                    val expectedDues = feeRepository.getCurrentBalance(student.id)
                     
                     if (expectedDues > 0) {
                         // Get last payment info

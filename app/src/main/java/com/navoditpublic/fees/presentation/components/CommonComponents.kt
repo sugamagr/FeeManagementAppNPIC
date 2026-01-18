@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.navoditpublic.fees.presentation.theme.AdvanceChipBackground
@@ -452,15 +453,21 @@ fun SearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
     placeholder: String = "Search...",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    height: Dp = 54.dp,
+    prominent: Boolean = false
 ) {
+    val actualHeight = if (prominent) 64.dp else height
+    val iconSize = if (prominent) 26.dp else 22.dp
+    val textStyle = if (prominent) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium
+    
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
         placeholder = {
             Text(
                 text = placeholder,
-                style = MaterialTheme.typography.bodyMedium,
+                style = textStyle,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -470,8 +477,8 @@ fun SearchBar(
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = "Search",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
+                tint = if (prominent) Saffron else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(iconSize)
             )
         },
         trailingIcon = {
@@ -487,20 +494,26 @@ fun SearchBar(
             }
         },
         singleLine = true,
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(if (prominent) 20.dp else 16.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            focusedContainerColor = if (prominent) 
+                MaterialTheme.colorScheme.surface 
+            else 
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            unfocusedContainerColor = if (prominent) 
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f) 
+            else 
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
             focusedBorderColor = Saffron,
-            unfocusedBorderColor = Color.Transparent,
+            unfocusedBorderColor = if (prominent) Saffron.copy(alpha = 0.3f) else Color.Transparent,
             cursorColor = Saffron
         ),
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
+        textStyle = textStyle.copy(
             color = MaterialTheme.colorScheme.onSurface
         ),
         modifier = modifier
             .fillMaxWidth()
-            .height(54.dp)
+            .height(actualHeight)
     )
 }
 

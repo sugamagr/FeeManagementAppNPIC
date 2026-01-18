@@ -25,6 +25,24 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+// Dues breakdown for display
+data class DuesBreakdown(
+    val previousYearDues: Double = 0.0,      // Opening balance
+    val tuitionFee: Double = 0.0,            // Current session tuition
+    val transportFee: Double = 0.0,          // Transport charges
+    val admissionFee: Double = 0.0,          // Admission fee if unpaid
+    val registrationFee: Double = 0.0,       // Registration fee for 9th-12th
+    val totalCharges: Double = 0.0,          // Sum of all charges
+    val totalPayments: Double = 0.0,         // Sum of all payments made
+    val balanceDue: Double = 0.0,            // Net balance
+    val monthlyTuitionRate: Double = 0.0,    // Monthly rate for monthly-fee classes
+    val annualTuitionRate: Double = 0.0,     // Annual rate for annual-fee classes (9th-12th)
+    val isMonthlyFeeClass: Boolean = true,   // Whether class has monthly or annual fees
+    val monthlyTransportRate: Double = 0.0,  // Monthly transport for contextual amounts
+    val hasTransport: Boolean = false,       // Whether student has transport
+    val transportRouteName: String = ""      // Route name if has transport
+)
+
 data class CollectFeeState(
     val isLoading: Boolean = true,
     val isSaving: Boolean = false,
@@ -43,6 +61,9 @@ data class CollectFeeState(
     val searchResults: List<StudentWithBalance> = emptyList(),
     val allStudents: List<StudentWithBalance> = emptyList(),
     val selectedStudent: StudentWithBalance? = null,
+    
+    // Dues breakdown for hybrid display
+    val duesBreakdown: DuesBreakdown = DuesBreakdown(),
     
     // Simplified fee collection - just enter amount
     val currentDues: Double = 0.0,
@@ -102,15 +123,11 @@ class CollectFeeViewModel @Inject constructor(
                 val currentSession = settingsRepository.getCurrentSession()
                 currentSessionId = currentSession?.id ?: 0
                 
-                // Load all students for scrolling selection with expected session dues
+                // Load all students for scrolling selection with current balance from ledger
                 val allStudents = studentRepository.getAllActiveStudents().first().map { student ->
-                    // Use expected session dues instead of just ledger balance
-                    val expectedDues = if (currentSessionId > 0) {
-                        feeRepository.calculateExpectedSessionDues(student.id, currentSessionId)
-                    } else {
-                        feeRepository.getCurrentBalance(student.id)
-                    }
-                    StudentWithBalance(student, expectedDues)
+                    // Use ledger balance - includes all fees and payments
+                    val balance = feeRepository.getCurrentBalance(student.id)
+                    StudentWithBalance(student, balance)
                 }
                 
                 _state.value = _state.value.copy(
@@ -123,12 +140,8 @@ class CollectFeeViewModel @Inject constructor(
                 if (preSelectedStudentId != null) {
                     val student = studentRepository.getById(preSelectedStudentId)
                     if (student != null) {
-                        val expectedDues = if (currentSessionId > 0) {
-                            feeRepository.calculateExpectedSessionDues(preSelectedStudentId, currentSessionId)
-                        } else {
-                            feeRepository.getCurrentBalance(preSelectedStudentId)
-                        }
-                        selectStudent(StudentWithBalance(student, expectedDues))
+                        val balance = feeRepository.getCurrentBalance(preSelectedStudentId)
+                        selectStudent(StudentWithBalance(student, balance))
                     }
                 }
             } catch (e: Exception) {
@@ -200,8 +213,8 @@ class CollectFeeViewModel @Inject constructor(
             viewModelScope.launch {
                 studentRepository.searchStudents(query).first().let { students ->
                     val studentsWithBalance = students.map { student ->
-                        // Use calculateExpectedSessionDues for accurate current session dues
-                        val balance = feeRepository.calculateExpectedSessionDues(student.id, currentSessionId)
+                        // Use ledger balance - includes all fees and payments
+                        val balance = feeRepository.getCurrentBalance(student.id)
                         StudentWithBalance(student, balance)
                     }
                     _state.value = _state.value.copy(searchResults = studentsWithBalance)
@@ -226,11 +239,15 @@ class CollectFeeViewModel @Inject constructor(
                 monthlyFeeAmount = 0.0  // No monthly discount for annual classes
             }
             
+            // Build dues breakdown from ledger data
+            val duesBreakdown = buildDuesBreakdown(student.id, className)
+            
             _state.value = _state.value.copy(
                 selectedStudent = studentWithBalance,
                 studentSearchQuery = "",
                 searchResults = emptyList(),
                 currentDues = studentWithBalance.currentBalance,
+                duesBreakdown = duesBreakdown,
                 fullYearDiscountAmount = monthlyFeeAmount,  // 1 month discount
                 amountReceived = "",
                 isFullYearPayment = false,
@@ -240,6 +257,73 @@ class CollectFeeViewModel @Inject constructor(
                 remainingDues = studentWithBalance.currentBalance
             )
         }
+    }
+    
+    private suspend fun buildDuesBreakdown(studentId: Long, className: String): DuesBreakdown {
+        val student = studentRepository.getById(studentId) ?: return DuesBreakdown()
+        
+        // Get fee structure for contextual amounts
+        val monthlyFee = feeRepository.getFeeForClass(currentSessionId, className, FeeType.MONTHLY)
+        val annualFee = feeRepository.getFeeForClass(currentSessionId, className, FeeType.ANNUAL)
+        val registrationFee = feeRepository.getRegistrationFee(currentSessionId, className)
+        val admissionFee = feeRepository.getAdmissionFee(currentSessionId, className)
+        
+        // Calculate tuition based on class type
+        val isMonthlyClass = className in FeeStructure.MONTHLY_FEE_CLASSES
+        val tuitionFee = if (isMonthlyClass) {
+            (monthlyFee?.amount ?: 0.0) * 12
+        } else {
+            annualFee?.amount ?: 0.0
+        }
+        
+        // Transport fee (from route if enrolled)
+        var transportFee = 0.0
+        var monthlyTransportRate = 0.0
+        var transportRouteName = ""
+        if (student.hasTransport && student.transportRouteId != null) {
+            val route = settingsRepository.getRouteById(student.transportRouteId)
+            if (route != null) {
+                monthlyTransportRate = route.getFeeForClass(className)
+                transportFee = monthlyTransportRate * 11 // 11 months (June excluded)
+                transportRouteName = route.routeName
+            }
+        }
+        
+        // Admission fee only if not paid
+        val admissionAmount = if (!student.admissionFeePaid) {
+            admissionFee?.amount ?: 0.0
+        } else {
+            0.0
+        }
+        
+        // Registration fee for 9th-12th
+        val regFeeAmount = if (className in FeeStructure.REGISTRATION_FEE_CLASSES) {
+            registrationFee?.amount ?: 0.0
+        } else {
+            0.0
+        }
+        
+        // Get totals from ledger
+        val totalDebits = feeRepository.getTotalDebits(studentId)
+        val totalCredits = feeRepository.getTotalCredits(studentId)
+        val balanceDue = feeRepository.getCurrentBalance(studentId)
+        
+        return DuesBreakdown(
+            previousYearDues = student.openingBalance,
+            tuitionFee = tuitionFee,
+            transportFee = transportFee,
+            admissionFee = admissionAmount,
+            registrationFee = regFeeAmount,
+            totalCharges = totalDebits,
+            totalPayments = totalCredits,
+            balanceDue = balanceDue,
+            monthlyTuitionRate = monthlyFee?.amount ?: 0.0,
+            annualTuitionRate = annualFee?.amount ?: 0.0,
+            isMonthlyFeeClass = isMonthlyClass,
+            monthlyTransportRate = monthlyTransportRate,
+            hasTransport = student.hasTransport,
+            transportRouteName = transportRouteName
+        )
     }
     
     fun clearStudent() {
@@ -324,6 +408,11 @@ class CollectFeeViewModel @Inject constructor(
                 val amount = _state.value.amountReceived.toDoubleOrNull() ?: 0.0
                 if (amount <= 0) {
                     _events.emit(CollectFeeEvent.Error("Please enter a valid amount"))
+                    return@launch
+                }
+                
+                if (_state.value.details.isBlank()) {
+                    _events.emit(CollectFeeEvent.Error("Please enter particulars (e.g., April-June Tuition)"))
                     return@launch
                 }
                 

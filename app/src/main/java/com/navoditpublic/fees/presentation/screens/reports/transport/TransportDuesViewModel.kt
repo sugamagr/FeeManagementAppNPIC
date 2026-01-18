@@ -137,14 +137,14 @@ class TransportDuesViewModel @Inject constructor(
                     
                     // Get transport-specific payments
                     // Calculate based on expected fees and payments ratio
-                    val expectedTotal = feeRepository.calculateExpectedSessionDues(student.id, sessionId)
+                    // Use ledger as single source of truth - includes all fees (opening balance, tuition, transport, admission)
+                    val totalExpectedFee = feeRepository.getTotalDebits(student.id)
                     
                     // Transport dues ratio (transport fee / total expected fee)
-                    val totalExpectedFee = expectedTotal + student.openingBalance
                     val transportRatio = if (totalExpectedFee > 0) totalFee / totalExpectedFee else 0.0
                     
                     // Estimate transport payment based on ratio
-                    val totalPaid = feeRepository.getTotalPaymentsForSession(student.id, sessionId)
+                    val totalPaid = feeRepository.getTotalCredits(student.id)
                     val estimatedTransportPaid = (totalPaid * transportRatio).coerceAtMost(totalFee)
                     val transportDues = (totalFee - estimatedTransportPaid).coerceAtLeast(0.0)
                     

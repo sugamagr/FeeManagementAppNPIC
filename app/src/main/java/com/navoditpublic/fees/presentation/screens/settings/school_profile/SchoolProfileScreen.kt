@@ -595,7 +595,7 @@ private fun ReceiptPreviewCard(
             Spacer(modifier = Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "Receipt Preview",
+                    text = "PDF Preview",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface

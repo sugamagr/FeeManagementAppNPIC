@@ -261,11 +261,8 @@ class ClassWiseViewModel @Inject constructor(
                     val studentsWithDues = mutableListOf<StudentReminderInfo>()
                     
                     for (student in activeStudents) {
-                        val balance = if (sessionId > 0) {
-                            feeRepository.calculateExpectedSessionDues(student.id, sessionId)
-                        } else {
-                            feeRepository.getCurrentBalance(student.id)
-                        }
+                        // Use ledger as single source of truth - includes all fees and payments
+                        val balance = feeRepository.getCurrentBalance(student.id)
                         
                         if (balance > 0) {
                             totalPending += balance

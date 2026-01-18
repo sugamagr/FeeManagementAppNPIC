@@ -559,6 +559,27 @@ class FeeRepositoryImpl @Inject constructor(
         
         var totalFeesAdded = 0.0
         
+        // Add admission fee if not already paid
+        if (!student.admissionFeePaid) {
+            val admissionFee = feeStructureDao.getAdmissionFee(sessionId, className)
+            if (admissionFee != null && admissionFee.amount > 0) {
+                val ledgerEntry = LedgerEntryEntity(
+                    studentId = studentId,
+                    sessionId = sessionId,
+                    entryDate = sessionStartDate,
+                    particulars = "Admission Fee (New Admission)",
+                    entryType = LedgerEntryType.DEBIT,
+                    debitAmount = admissionFee.amount,
+                    creditAmount = 0.0,
+                    balance = 0.0, // Temporary - will be recalculated
+                    referenceType = LedgerReferenceType.FEE_CHARGE,
+                    referenceId = 0
+                )
+                ledgerDao.insert(ledgerEntry)
+                totalFeesAdded += admissionFee.amount
+            }
+        }
+        
         // Add tuition fees (with temporary balance - will be recalculated at end)
         if (addTuition) {
             val isMonthlyClass = className in FeeStructure.MONTHLY_FEE_CLASSES

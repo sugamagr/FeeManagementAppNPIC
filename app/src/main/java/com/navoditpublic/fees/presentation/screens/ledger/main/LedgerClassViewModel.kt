@@ -96,15 +96,16 @@ class LedgerClassViewModel @Inject constructor(
                     .filter { it.isActive }
                 
                 val studentInfoList = students.map { student ->
-                    val expectedFees = feeRepository.calculateExpectedSessionDues(student.id, sessionId) + student.openingBalance
-                    val paidAmount = feeRepository.getTotalPaymentsForSession(student.id, sessionId)
-                    val netBalance = expectedFees // Since calculateExpectedSessionDues already subtracts payments
+                    // Use ledger as single source of truth
+                    val totalDebits = feeRepository.getTotalDebits(student.id) // All fees charged (opening balance, tuition, transport, admission)
+                    val paidAmount = feeRepository.getTotalCredits(student.id) // All payments
+                    val netBalance = feeRepository.getCurrentBalance(student.id) // Current balance owed
                     
                     StudentLedgerInfo(
                         student = student,
-                        expectedFees = expectedFees + paidAmount, // Total expected before payments
+                        expectedFees = totalDebits, // Total fees charged
                         paidAmount = paidAmount,
-                        openingBalance = student.openingBalance,
+                        openingBalance = student.openingBalance, // For display purposes
                         netBalance = netBalance
                     )
                 }

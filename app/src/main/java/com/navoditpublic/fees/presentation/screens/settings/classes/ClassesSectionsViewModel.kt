@@ -11,12 +11,43 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// Data class for section with student count
+data class SectionInfo(
+    val name: String,
+    val studentCount: Int
+)
+
+// Data class for class with all its info
+data class ClassInfo(
+    val className: String,
+    val sections: List<SectionInfo>,
+    val totalStudents: Int,
+    val level: ClassLevel
+)
+
+// Enum for class levels with display order
+enum class ClassLevel(val displayName: String, val order: Int) {
+    PRE_PRIMARY("Pre-Primary", 0),
+    PRIMARY("Primary (1-3)", 1),
+    MIDDLE("Middle (4-6)", 2),
+    SECONDARY("Secondary (7-10)", 3),
+    SENIOR_SECONDARY("Senior Secondary (11-12)", 4)
+}
 
 data class ClassesSectionsState(
     val isLoading: Boolean = true,
     val classesWithSections: Map<String, List<String>> = emptyMap(),
+    val classInfoList: List<ClassInfo> = emptyList(),
+    val totalClasses: Int = 0,
+    val totalSections: Int = 0,
+    val totalStudents: Int = 0,
+    val searchQuery: String = "",
+    val showSearch: Boolean = false,
+    val expandedLevels: Set<ClassLevel> = ClassLevel.entries.toSet(),
     val error: String? = null
 )
 
@@ -43,7 +74,14 @@ class ClassesSectionsViewModel @Inject constructor(
     
     private fun loadData() {
         viewModelScope.launch {
-            classSectionDao.getAllActiveClassSections().collect { classSections ->
+            // Combine class sections Flow with student count Flow
+            // This ensures we refresh when EITHER classes change OR students change
+            combine(
+                classSectionDao.getAllActiveClassSections(),
+                classSectionDao.getTotalStudentCountFlow()
+            ) { classSections, totalStudentCount ->
+                Pair(classSections, totalStudentCount)
+            }.collect { (classSections, _) ->
                 val grouped = classSections
                     .groupBy { it.className }
                     .mapValues { entry -> entry.value.map { it.sectionName }.sorted() }
@@ -60,11 +98,78 @@ class ClassesSectionsViewModel @Inject constructor(
                         }
                     })
                 
-                _state.value = ClassesSectionsState(
+                // Build enhanced class info with student counts
+                val classInfoList = grouped.map { (className, sections) ->
+                    val sectionInfoList = sections.map { sectionName ->
+                        SectionInfo(
+                            name = sectionName,
+                            studentCount = classSectionDao.getStudentCountInSection(className, sectionName)
+                        )
+                    }
+                    ClassInfo(
+                        className = className,
+                        sections = sectionInfoList,
+                        totalStudents = sectionInfoList.sumOf { it.studentCount },
+                        level = getClassLevel(className)
+                    )
+                }
+                
+                // Get totals
+                val totalStudents = classSectionDao.getTotalStudentCount()
+                val totalSections = classSectionDao.getTotalSectionCount()
+                
+                _state.value = _state.value.copy(
                     isLoading = false,
-                    classesWithSections = grouped
+                    classesWithSections = grouped,
+                    classInfoList = classInfoList,
+                    totalClasses = grouped.size,
+                    totalSections = totalSections,
+                    totalStudents = totalStudents
                 )
             }
+        }
+    }
+    
+    private fun getClassLevel(className: String): ClassLevel {
+        return when (className) {
+            "NC", "LKG", "UKG" -> ClassLevel.PRE_PRIMARY
+            "1st", "2nd", "3rd" -> ClassLevel.PRIMARY
+            "4th", "5th", "6th" -> ClassLevel.MIDDLE
+            "7th", "8th", "9th", "10th" -> ClassLevel.SECONDARY
+            "11th", "12th" -> ClassLevel.SENIOR_SECONDARY
+            else -> ClassLevel.PRIMARY
+        }
+    }
+    
+    fun toggleSearch() {
+        _state.value = _state.value.copy(
+            showSearch = !_state.value.showSearch,
+            searchQuery = if (_state.value.showSearch) "" else _state.value.searchQuery
+        )
+    }
+    
+    fun onSearchQueryChange(query: String) {
+        _state.value = _state.value.copy(searchQuery = query)
+    }
+    
+    fun clearSearch() {
+        _state.value = _state.value.copy(searchQuery = "", showSearch = false)
+    }
+    
+    fun toggleLevelExpanded(level: ClassLevel) {
+        val current = _state.value.expandedLevels
+        _state.value = _state.value.copy(
+            expandedLevels = if (level in current) current - level else current + level
+        )
+    }
+    
+    fun getFilteredClasses(): List<ClassInfo> {
+        val query = _state.value.searchQuery.lowercase()
+        if (query.isBlank()) return _state.value.classInfoList
+        
+        return _state.value.classInfoList.filter { classInfo ->
+            classInfo.className.lowercase().contains(query) ||
+            classInfo.sections.any { it.name.lowercase().contains(query) }
         }
     }
     
@@ -81,6 +186,34 @@ class ClassesSectionsViewModel @Inject constructor(
                 }.onFailure { e ->
                     _events.emit(ClassesSectionsEvent.Error(e.message ?: "Failed to add section"))
                 }
+            } catch (e: Exception) {
+                _events.emit(ClassesSectionsEvent.Error(e.message ?: "An error occurred"))
+            }
+        }
+    }
+    
+    fun addMultipleSections(className: String, sections: List<String>) {
+        viewModelScope.launch {
+            try {
+                var addedCount = 0
+                var skippedCount = 0
+                
+                for (sectionName in sections) {
+                    if (!classSectionDao.classSectionExists(className, sectionName)) {
+                        settingsRepository.addSection(className, sectionName).onSuccess {
+                            addedCount++
+                        }
+                    } else {
+                        skippedCount++
+                    }
+                }
+                
+                val message = when {
+                    addedCount > 0 && skippedCount > 0 -> "Added $addedCount sections, $skippedCount already existed"
+                    addedCount > 0 -> "Added $addedCount sections to $className"
+                    else -> "All sections already exist for $className"
+                }
+                _events.emit(ClassesSectionsEvent.Success(message))
             } catch (e: Exception) {
                 _events.emit(ClassesSectionsEvent.Error(e.message ?: "An error occurred"))
             }
@@ -115,5 +248,3 @@ class ClassesSectionsViewModel @Inject constructor(
         }
     }
 }
-
-

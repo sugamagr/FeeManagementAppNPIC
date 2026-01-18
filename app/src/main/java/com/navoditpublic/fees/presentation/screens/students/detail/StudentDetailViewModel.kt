@@ -75,14 +75,10 @@ class StudentDetailViewModel @Inject constructor(
                 val currentSession = settingsRepository.getCurrentSession()
                 val sessionId = currentSession?.id ?: 0L
                 
-                // Load balance using expected session dues for accurate display
-                val balance = if (sessionId > 0) {
-                    feeRepository.calculateExpectedSessionDues(studentId, sessionId)
-                } else {
-                    feeRepository.getCurrentBalance(studentId)
-                }
-                val totalDebits = feeRepository.getTotalDebits(studentId)
-                val totalCredits = feeRepository.getTotalCredits(studentId)
+                // Use ledger as single source of truth for all financial data
+                val balance = feeRepository.getCurrentBalance(studentId) // Current dues (all fees minus payments)
+                val totalDebits = feeRepository.getTotalDebits(studentId) // All fees charged
+                val totalCredits = feeRepository.getTotalCredits(studentId) // All payments made
                 
                 // Load recent receipts
                 val receipts = feeRepository.getReceiptsForStudent(studentId).first().take(5)

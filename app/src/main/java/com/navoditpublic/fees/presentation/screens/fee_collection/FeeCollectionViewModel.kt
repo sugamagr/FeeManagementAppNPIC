@@ -14,11 +14,12 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import javax.inject.Inject
 
+// Reordered: ALL first (default), then Today, Week, Month
 enum class ReceiptTab(val title: String) {
+    ALL("All"),
     TODAY("Today"),
     WEEK("This Week"),
-    MONTH("This Month"),
-    ALL("All")
+    MONTH("This Month")
 }
 
 enum class PaymentFilter(val displayName: String) {
@@ -56,11 +57,15 @@ data class FeeCollectionState(
     // Filtered receipts for display
     val filteredReceipts: List<ReceiptWithStudent> = emptyList(),
     
-    // Filters & Search
-    val selectedTab: ReceiptTab = ReceiptTab.TODAY,
+    // Filters & Search - Default to ALL tab
+    val selectedTab: ReceiptTab = ReceiptTab.ALL,
     val searchQuery: String = "",
     val paymentFilter: PaymentFilter = PaymentFilter.ALL,
     val statusFilter: StatusFilter = StatusFilter.ALL,
+    
+    // Class filter
+    val availableClasses: List<String> = emptyList(),
+    val selectedClass: String? = null, // null means "All Classes"
     
     // Error
     val error: String? = null
@@ -86,8 +91,6 @@ class FeeCollectionViewModel @Inject constructor(
                 val todayEnd = getEndOfDay(now)
                 val weekStart = getStartOfWeek(now)
                 val monthStart = getStartOfMonth(now)
-                val yesterdayStart = getStartOfDay(now - 24 * 60 * 60 * 1000)
-                val yesterdayEnd = getEndOfDay(now - 24 * 60 * 60 * 1000)
                 
                 // Combine all necessary data flows
                 combine(
@@ -117,6 +120,13 @@ class FeeCollectionViewModel @Inject constructor(
                     }
                     val cancelledReceipts = receipts.filter { it.receipt.isCancelled }
                     
+                    // Extract unique classes for filter
+                    val classes = receipts
+                        .map { it.studentClass }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+                        .sorted()
+                    
                     FeeCollectionState(
                         isLoading = false,
                         todayCollection = todayTotal ?: 0.0,
@@ -130,12 +140,14 @@ class FeeCollectionViewModel @Inject constructor(
                         onlineCount = onlineReceipts.size,
                         cancelledCount = cancelledReceipts.size,
                         allReceipts = receipts,
+                        availableClasses = classes,
                         filteredReceipts = applyFilters(
                             receipts, 
                             _state.value.selectedTab, 
                             _state.value.searchQuery,
                             _state.value.paymentFilter,
-                            _state.value.statusFilter
+                            _state.value.statusFilter,
+                            _state.value.selectedClass
                         )
                     )
                 }.collect { newState ->
@@ -144,12 +156,14 @@ class FeeCollectionViewModel @Inject constructor(
                         searchQuery = _state.value.searchQuery,
                         paymentFilter = _state.value.paymentFilter,
                         statusFilter = _state.value.statusFilter,
+                        selectedClass = _state.value.selectedClass,
                         filteredReceipts = applyFilters(
                             newState.allReceipts,
                             _state.value.selectedTab,
                             _state.value.searchQuery,
                             _state.value.paymentFilter,
-                            _state.value.statusFilter
+                            _state.value.statusFilter,
+                            _state.value.selectedClass
                         )
                     )
                 }
@@ -170,7 +184,8 @@ class FeeCollectionViewModel @Inject constructor(
                 tab, 
                 _state.value.searchQuery,
                 _state.value.paymentFilter,
-                _state.value.statusFilter
+                _state.value.statusFilter,
+                _state.value.selectedClass
             )
         )
     }
@@ -183,7 +198,8 @@ class FeeCollectionViewModel @Inject constructor(
                 _state.value.selectedTab, 
                 query,
                 _state.value.paymentFilter,
-                _state.value.statusFilter
+                _state.value.statusFilter,
+                _state.value.selectedClass
             )
         )
     }
@@ -196,7 +212,8 @@ class FeeCollectionViewModel @Inject constructor(
                 _state.value.selectedTab, 
                 _state.value.searchQuery,
                 filter,
-                _state.value.statusFilter
+                _state.value.statusFilter,
+                _state.value.selectedClass
             )
         )
     }
@@ -209,7 +226,22 @@ class FeeCollectionViewModel @Inject constructor(
                 _state.value.selectedTab, 
                 _state.value.searchQuery,
                 _state.value.paymentFilter,
-                filter
+                filter,
+                _state.value.selectedClass
+            )
+        )
+    }
+    
+    fun updateClassFilter(className: String?) {
+        _state.value = _state.value.copy(
+            selectedClass = className,
+            filteredReceipts = applyFilters(
+                _state.value.allReceipts, 
+                _state.value.selectedTab, 
+                _state.value.searchQuery,
+                _state.value.paymentFilter,
+                _state.value.statusFilter,
+                className
             )
         )
     }
@@ -219,12 +251,14 @@ class FeeCollectionViewModel @Inject constructor(
             searchQuery = "",
             paymentFilter = PaymentFilter.ALL,
             statusFilter = StatusFilter.ALL,
+            selectedClass = null,
             filteredReceipts = applyFilters(
                 _state.value.allReceipts, 
                 _state.value.selectedTab, 
                 "",
                 PaymentFilter.ALL,
-                StatusFilter.ALL
+                StatusFilter.ALL,
+                null
             )
         )
     }
@@ -234,7 +268,8 @@ class FeeCollectionViewModel @Inject constructor(
         tab: ReceiptTab,
         searchQuery: String,
         paymentFilter: PaymentFilter,
-        statusFilter: StatusFilter
+        statusFilter: StatusFilter,
+        classFilter: String?
     ): List<ReceiptWithStudent> {
         val now = System.currentTimeMillis()
         val todayStart = getStartOfDay(now)
@@ -247,10 +282,10 @@ class FeeCollectionViewModel @Inject constructor(
             
             // Tab filter (date range)
             val passesTabFilter = when (tab) {
+                ReceiptTab.ALL -> true
                 ReceiptTab.TODAY -> receipt.receiptDate >= todayStart && receipt.receiptDate <= todayEnd
                 ReceiptTab.WEEK -> receipt.receiptDate >= weekStart && receipt.receiptDate <= todayEnd
                 ReceiptTab.MONTH -> receipt.receiptDate >= monthStart && receipt.receiptDate <= todayEnd
-                ReceiptTab.ALL -> true
             }
             
             // Search filter
@@ -277,7 +312,11 @@ class FeeCollectionViewModel @Inject constructor(
                 StatusFilter.CANCELLED -> receipt.isCancelled
             }
             
-            passesTabFilter && passesSearchFilter && passesPaymentFilter && passesStatusFilter
+            // Class filter
+            val passesClassFilter = classFilter == null || 
+                receiptWithStudent.studentClass.equals(classFilter, ignoreCase = true)
+            
+            passesTabFilter && passesSearchFilter && passesPaymentFilter && passesStatusFilter && passesClassFilter
         }.sortedByDescending { it.receipt.receiptDate }
     }
     
@@ -307,7 +346,13 @@ class FeeCollectionViewModel @Inject constructor(
     private fun getStartOfWeek(timestamp: Long): Long {
         val cal = Calendar.getInstance().apply { 
             timeInMillis = timestamp
-            set(Calendar.DAY_OF_WEEK, firstDayOfWeek)
+            // Calculate days to subtract to reach the start of the week
+            val currentDayOfWeek = get(Calendar.DAY_OF_WEEK)
+            var daysToSubtract = currentDayOfWeek - firstDayOfWeek
+            if (daysToSubtract < 0) {
+                daysToSubtract += 7 // Wrap around if current day is before first day of week
+            }
+            add(Calendar.DAY_OF_MONTH, -daysToSubtract)
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)

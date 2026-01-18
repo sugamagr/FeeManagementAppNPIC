@@ -103,12 +103,17 @@ interface FeeRepository {
     fun getStudentIdsWithDues(): Flow<List<Long>>
     
     /**
-     * Calculate expected session dues for a student.
-     * This calculates the full session fees (April to March) minus payments made.
-     * For monthly classes: 12 months of fees (with discount if applicable)
-     * For annual classes: Annual fee + registration fee
-     * Plus transport fees if applicable
+     * @deprecated Use getCurrentBalance() instead - it includes all fees from ledger (opening balance, 
+     * tuition, transport, admission) minus payments. The ledger is the single source of truth.
+     * 
+     * For total fees charged, use getTotalDebits(studentId).
+     * For total payments, use getTotalCredits(studentId).
+     * For current balance owed, use getCurrentBalance(studentId).
      */
+    @Deprecated(
+        message = "Use getCurrentBalance() for dues, getTotalDebits() for total fees charged. Ledger is single source of truth.",
+        replaceWith = ReplaceWith("getCurrentBalance(studentId)")
+    )
     suspend fun calculateExpectedSessionDues(studentId: Long, sessionId: Long): Double
     
     /**
