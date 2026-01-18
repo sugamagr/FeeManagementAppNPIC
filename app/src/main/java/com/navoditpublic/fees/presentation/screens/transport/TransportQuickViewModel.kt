@@ -57,7 +57,7 @@ data class TransportQuickState(
     val enrollSearchQuery: String = "",
     val selectedRouteFilter: Long? = null, // null = All routes
     val selectedClassFilter: String? = null, // null = All classes
-    val sortOption: TransportSortOption = TransportSortOption.NAME_ASC,
+    val sortOption: TransportSortOption = TransportSortOption.CLASS_ASC,
     val totalEnrolled: Int = 0,
     val totalWithoutTransport: Int = 0,
     val error: String? = null

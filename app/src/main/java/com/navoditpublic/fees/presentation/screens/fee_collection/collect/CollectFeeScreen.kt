@@ -3,10 +3,22 @@ package com.navoditpublic.fees.presentation.screens.fee_collection.collect
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,6 +33,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,11 +48,14 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.Money
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -73,15 +89,23 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.navoditpublic.fees.data.local.entity.PaymentMode
@@ -93,10 +117,19 @@ import com.navoditpublic.fees.presentation.theme.PaidChipBackground
 import com.navoditpublic.fees.presentation.theme.PaidChipText
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronDark
+import com.navoditpublic.fees.presentation.theme.SaffronLight
 import com.navoditpublic.fees.util.DateUtils
 import com.navoditpublic.fees.util.NumberToWords
 import com.navoditpublic.fees.util.toRupees
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.random.Random
+
+// Premium Colors
+private val SuccessGreen = Color(0xFF10B981)
+private val SuccessGreenLight = Color(0xFFD1FAE5)
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -109,7 +142,10 @@ fun CollectFeeScreen(
     val context = LocalContext.current
     var showDatePicker by remember { mutableStateOf(false) }
     var showStudentSheet by remember { mutableStateOf(false) }
+    var showReceiptPreview by remember { mutableStateOf(false) }
+    var showSuccessAnimation by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val previewSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val drawerState = LocalDrawerState.current
     
@@ -120,13 +156,52 @@ fun CollectFeeScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is CollectFeeEvent.Success -> {
-                    Toast.makeText(context, "Receipt saved!", Toast.LENGTH_SHORT).show()
+                    showReceiptPreview = false
+                    showSuccessAnimation = true
+                    delay(2500) // Show success animation for 2.5 seconds
                     navController.popBackStack()
                 }
                 is CollectFeeEvent.Error -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+    
+    // Success Animation Overlay
+    AnimatedVisibility(
+        visible = showSuccessAnimation,
+        enter = fadeIn(tween(300)),
+        exit = fadeOut(tween(300))
+    ) {
+        SuccessOverlay(
+            receiptNumber = state.receiptNumber,
+            studentName = state.selectedStudent?.student?.name ?: "",
+            amount = state.total
+        )
+    }
+    
+    // Receipt Preview Bottom Sheet
+    if (showReceiptPreview) {
+        ModalBottomSheet(
+            onDismissRequest = { showReceiptPreview = false },
+            sheetState = previewSheetState,
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            ReceiptPreviewContent(
+                receiptNumber = state.receiptNumber,
+                studentName = state.selectedStudent?.student?.name ?: "",
+                className = state.selectedStudent?.student?.classSection ?: "",
+                amount = state.total,
+                discount = state.discount,
+                paymentMode = state.paymentMode,
+                receiptDate = state.receiptDate,
+                remarks = state.details,
+                isSaving = state.isSaving,
+                onConfirm = { viewModel.saveReceipt() },
+                onCancel = { showReceiptPreview = false }
+            )
         }
     }
     
@@ -217,20 +292,15 @@ fun CollectFeeScreen(
                         }
                         Spacer(Modifier.height(8.dp))
                         Button(
-                            onClick = { viewModel.saveReceipt() },
+                            onClick = { showReceiptPreview = true },
                             modifier = Modifier.fillMaxWidth().height(48.dp),
                             enabled = state.receiptNumber.isNotBlank() && !state.showDuplicateWarning && !state.isSaving && state.dateError == null,
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Saffron)
                         ) {
-                            if (state.isSaving) {
-                                androidx.compose.material3.CircularProgressIndicator(
-                                    Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Check, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Save Receipt", fontWeight = FontWeight.Bold)
-                            }
+                            Icon(Icons.Default.Receipt, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Preview & Save", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -731,5 +801,456 @@ private fun StudentItem(student: StudentWithBalance, onClick: (StudentWithBalanc
                 )
             }
         }
+    }
+}
+
+// ============================================================================
+// SUCCESS ANIMATION OVERLAY
+// ============================================================================
+
+@Composable
+private fun SuccessOverlay(
+    receiptNumber: String,
+    studentName: String,
+    amount: Double
+) {
+    // Confetti particles
+    val particles = remember {
+        List(50) {
+            ConfettiParticle(
+                x = Random.nextFloat(),
+                y = Random.nextFloat() * 0.5f,
+                angle = Random.nextFloat() * 360f,
+                speed = Random.nextFloat() * 2f + 1f,
+                size = Random.nextFloat() * 12f + 6f,
+                color = listOf(
+                    Saffron,
+                    SaffronLight,
+                    SuccessGreen,
+                    Color(0xFF3B82F6),
+                    Color(0xFFEC4899),
+                    Color(0xFF8B5CF6)
+                ).random()
+            )
+        }
+    }
+    
+    val infiniteTransition = rememberInfiniteTransition(label = "confetti")
+    val animProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "progress"
+    )
+    
+    // Check mark animation
+    val checkScale = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        checkScale.animateTo(1.2f, tween(300, easing = FastOutSlowInEasing))
+        checkScale.animateTo(1f, tween(150))
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f)),
+        contentAlignment = Alignment.Center
+    ) {
+        // Confetti Canvas
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            particles.forEach { particle ->
+                val progress = (animProgress + particle.y) % 1f
+                val x = particle.x * size.width + sin(progress * 10f + particle.angle) * 50f
+                val y = progress * size.height * 1.5f
+                val rotation = progress * 720f + particle.angle
+                
+                drawCircle(
+                    color = particle.color.copy(alpha = (1f - progress).coerceIn(0f, 1f)),
+                    radius = particle.size,
+                    center = Offset(x, y)
+                )
+            }
+        }
+        
+        // Success content
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            // Animated checkmark circle
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .scale(checkScale.value)
+                    .clip(CircleShape)
+                    .background(SuccessGreen),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(64.dp)
+                )
+            }
+            
+            Spacer(Modifier.height(32.dp))
+            
+            Text(
+                text = "Receipt Saved!",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            
+            Spacer(Modifier.height(8.dp))
+            
+            Text(
+                text = "Receipt #$receiptNumber",
+                style = MaterialTheme.typography.titleMedium,
+                color = SuccessGreen
+            )
+            
+            Spacer(Modifier.height(24.dp))
+            
+            // Summary card
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White.copy(alpha = 0.1f)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = studentName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = amount.toRupees(),
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = SuccessGreen
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class ConfettiParticle(
+    val x: Float,
+    val y: Float,
+    val angle: Float,
+    val speed: Float,
+    val size: Float,
+    val color: Color
+)
+
+// ============================================================================
+// RECEIPT PREVIEW
+// ============================================================================
+
+@Composable
+private fun ReceiptPreviewContent(
+    receiptNumber: String,
+    studentName: String,
+    className: String,
+    amount: Double,
+    discount: Double,
+    paymentMode: PaymentMode,
+    receiptDate: Long,
+    remarks: String,
+    isSaving: Boolean,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val dateFormat = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.getDefault())
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 32.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Receipt Preview",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Saffron.copy(alpha = 0.1f)
+            ) {
+                Text(
+                    text = "#$receiptNumber",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Saffron,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
+        
+        Spacer(Modifier.height(20.dp))
+        
+        // Receipt Card Preview
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBF5)),
+            elevation = CardDefaults.cardElevation(4.dp)
+        ) {
+            Column {
+                // Top accent
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(Saffron, SaffronDark)
+                            )
+                        )
+                )
+                
+                Column(modifier = Modifier.padding(20.dp)) {
+                    // Student Info
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(Saffron, SaffronDark)
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = studentName
+                                    .split(" ")
+                                    .take(2)
+                                    .mapNotNull { it.firstOrNull()?.uppercase() }
+                                    .joinToString(""),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                        
+                        Spacer(Modifier.width(14.dp))
+                        
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = studentName,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "Class $className",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(20.dp))
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                    Spacer(Modifier.height(20.dp))
+                    
+                    // Amount Section
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Saffron.copy(alpha = 0.08f))
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Amount",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.Gray
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = amount.toRupees(),
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Saffron
+                            )
+                            if (discount > 0) {
+                                Spacer(Modifier.height(4.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = SuccessGreenLight
+                                ) {
+                                    Text(
+                                        text = "+${discount.toRupees()} bonus",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SuccessGreen,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    // Details Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        PreviewDetailItem(
+                            icon = Icons.Default.CalendarToday,
+                            label = "Date",
+                            value = dateFormat.format(java.util.Date(receiptDate))
+                        )
+                        PreviewDetailItem(
+                            icon = if (paymentMode == PaymentMode.CASH) Icons.Default.Money else Icons.Default.CreditCard,
+                            label = "Mode",
+                            value = if (paymentMode == PaymentMode.CASH) "Cash" else "Online",
+                            alignment = Alignment.End
+                        )
+                    }
+                    
+                    if (remarks.isNotBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.Gray.copy(alpha = 0.05f)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Remarks",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = remarks,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    // Amount in words
+                    Text(
+                        text = NumberToWords.convert(amount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(24.dp))
+        
+        // Action Buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Cancel button
+            Button(
+                onClick = onCancel,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Gray.copy(alpha = 0.1f),
+                    contentColor = Color.DarkGray
+                ),
+                enabled = !isSaving
+            ) {
+                Text("Edit", fontWeight = FontWeight.SemiBold)
+            }
+            
+            // Confirm button
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier
+                    .weight(2f)
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                enabled = !isSaving
+            ) {
+                if (isSaving) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Default.CheckCircle, null, Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Confirm & Save", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewDetailItem(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    alignment: Alignment.Horizontal = Alignment.Start
+) {
+    Column(horizontalAlignment = alignment) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = Color.Gray,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = Color.Black
+        )
     }
 }

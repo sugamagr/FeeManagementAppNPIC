@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -117,6 +118,8 @@ private val CardBackground = Color(0xFFFFFAF5) // Warm cream background
 @Composable
 fun TransportQuickScreen(
     navController: NavController,
+    preSelectedStudentId: Long? = null,
+    preSelectedAction: String? = null, // "manage" or "enroll"
     viewModel: TransportQuickViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -138,6 +141,45 @@ fun TransportQuickScreen(
     var selectedRouteId by remember { mutableLongStateOf(0L) }
     var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var transportHistory by remember { mutableStateOf<List<TransportEnrollmentWithRoute>>(emptyList()) }
+    
+    // Track if we've handled the pre-selection
+    var hasHandledPreSelection by remember { mutableStateOf(false) }
+    
+    // LazyListState for scrolling to pre-selected student
+    val listState = rememberLazyListState()
+    
+    // Handle pre-selected student when data is loaded
+    LaunchedEffect(state.isLoading, state.filteredStudents, preSelectedStudentId, preSelectedAction) {
+        if (!state.isLoading && preSelectedStudentId != null && !hasHandledPreSelection) {
+            hasHandledPreSelection = true
+            
+            when (preSelectedAction) {
+                "manage" -> {
+                    // Find the enrolled student and show action sheet
+                    val studentInfo = state.enrolledStudents.find { it.student.id == preSelectedStudentId }
+                    if (studentInfo != null) {
+                        selectedStudentInfo = studentInfo
+                        showActionSheet = true
+                        
+                        // Scroll to the student in the filtered list
+                        val index = state.filteredStudents.indexOfFirst { it.student.id == preSelectedStudentId }
+                        if (index >= 0) {
+                            listState.animateScrollToItem(index)
+                        }
+                    }
+                }
+                "enroll" -> {
+                    // Find the student without transport and show enroll sheet
+                    val student = state.studentsWithoutTransport.find { it.id == preSelectedStudentId }
+                    if (student != null) {
+                        selectedStudentForEnroll = student
+                        selectedDate = System.currentTimeMillis()
+                        showEnrollSheet = true
+                    }
+                }
+            }
+        }
+    }
     
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -518,6 +560,7 @@ fun TransportQuickScreen(
                         }
                     } else {
                         LazyColumn(
+                            state = listState,
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {

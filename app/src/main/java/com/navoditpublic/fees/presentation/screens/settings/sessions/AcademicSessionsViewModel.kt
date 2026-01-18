@@ -19,12 +19,15 @@ import javax.inject.Inject
 data class AcademicSessionsState(
     val isLoading: Boolean = true,
     val sessions: List<AcademicSession> = emptyList(),
+    val inactiveSessions: List<AcademicSession> = emptyList(),
     val error: String? = null,
     // For fee addition dialog
     val showAddFeesDialog: Boolean = false,
     val newSessionId: Long? = null,
     val newSessionName: String = "",
-    val isAddingFees: Boolean = false
+    val isAddingFees: Boolean = false,
+    // For showing inactive sessions
+    val showInactiveSessions: Boolean = false
 )
 
 sealed class SessionEvent {
@@ -51,13 +54,23 @@ class AcademicSessionsViewModel @Inject constructor(
     
     private fun loadSessions() {
         viewModelScope.launch {
-            settingsRepository.getAllSessions().collect { sessions ->
-                _state.value = AcademicSessionsState(
+            settingsRepository.getAllSessions().collect { allSessions ->
+                val activeSessions = allSessions.filter { it.isActive }
+                val inactiveSessions = allSessions.filter { !it.isActive }
+                
+                _state.value = _state.value.copy(
                     isLoading = false,
-                    sessions = sessions
+                    sessions = activeSessions,
+                    inactiveSessions = inactiveSessions
                 )
             }
         }
+    }
+    
+    fun toggleShowInactiveSessions() {
+        _state.value = _state.value.copy(
+            showInactiveSessions = !_state.value.showInactiveSessions
+        )
     }
     
     fun addSession(sessionName: String) {
@@ -162,6 +175,48 @@ class AcademicSessionsViewModel @Inject constructor(
             }
         }
     }
+    
+    fun deactivateSession(sessionId: Long) {
+        viewModelScope.launch {
+            // Check if it's the current session
+            val session = _state.value.sessions.find { it.id == sessionId }
+            if (session?.isCurrent == true) {
+                _events.emit(SessionEvent.Error("Cannot deactivate current session. Set another session as current first."))
+                return@launch
+            }
+            
+            settingsRepository.setSessionActive(sessionId, false).onSuccess {
+                _events.emit(SessionEvent.Success("Session moved to inactive"))
+            }.onFailure { e ->
+                _events.emit(SessionEvent.Error(e.message ?: "Failed to deactivate"))
+            }
+        }
+    }
+    
+    fun reactivateSession(sessionId: Long) {
+        viewModelScope.launch {
+            settingsRepository.setSessionActive(sessionId, true).onSuccess {
+                _events.emit(SessionEvent.Success("Session reactivated"))
+            }.onFailure { e ->
+                _events.emit(SessionEvent.Error(e.message ?: "Failed to reactivate"))
+            }
+        }
+    }
+    
+    fun permanentlyDeleteSession(sessionId: Long) {
+        viewModelScope.launch {
+            // Only allow deletion of inactive sessions
+            val session = _state.value.inactiveSessions.find { it.id == sessionId }
+            if (session == null) {
+                _events.emit(SessionEvent.Error("Only inactive sessions can be permanently deleted"))
+                return@launch
+            }
+            
+            settingsRepository.deleteSession(sessionId).onSuccess {
+                _events.emit(SessionEvent.Success("Session permanently deleted"))
+            }.onFailure { e ->
+                _events.emit(SessionEvent.Error(e.message ?: "Failed to delete"))
+            }
+        }
+    }
 }
-
-

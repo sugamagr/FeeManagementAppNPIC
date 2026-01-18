@@ -260,8 +260,26 @@ fun FeesNavHost() {
                         }
                         
                         // Transport Quick Management (accessible from dashboard)
-                        composable(Screen.TransportQuick.route) {
-                            TransportQuickScreen(navController = navController)
+                        composable(
+                            route = Screen.TransportQuick.route,
+                            arguments = listOf(
+                                navArgument("studentId") {
+                                    type = NavType.LongType
+                                    defaultValue = -1L
+                                },
+                                navArgument("action") {
+                                    type = NavType.StringType
+                                    defaultValue = ""
+                                }
+                            )
+                        ) { backStackEntry ->
+                            val studentId = backStackEntry.arguments?.getLong("studentId") ?: -1L
+                            val action = backStackEntry.arguments?.getString("action") ?: ""
+                            TransportQuickScreen(
+                                navController = navController,
+                                preSelectedStudentId = if (studentId > 0) studentId else null,
+                                preSelectedAction = action.ifBlank { null }
+                            )
                         }
                     }
                     

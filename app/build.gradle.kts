@@ -97,9 +97,6 @@ dependencies {
     // Coil for images
     implementation(libs.coil.compose)
 
-    // Phosphor Icons
-    implementation(libs.phosphor.icons)
-
     // Unit Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)

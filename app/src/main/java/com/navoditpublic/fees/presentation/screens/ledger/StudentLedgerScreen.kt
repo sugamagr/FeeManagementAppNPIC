@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsBus
@@ -438,6 +439,10 @@ fun StudentLedgerScreen(
                             admissionFeePaid = student.admissionFeePaid,
                             hasTransport = student.hasTransport,
                             transportRouteName = state.transportRoute?.routeName,
+                            onTransportClick = { 
+                                val action = if (student.hasTransport) "manage" else "enroll"
+                                navController.navigate(Screen.TransportQuick.createRoute(studentId = studentId, action = action))
+                            },
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
@@ -1236,6 +1241,7 @@ private fun StudentDetailsCard(
     admissionFeePaid: Boolean,
     hasTransport: Boolean,
     transportRouteName: String?,
+    onTransportClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -1290,12 +1296,44 @@ private fun StudentDetailsCard(
                         valueColor = if (admissionFeePaid) PaidChipText else DueChipText
                     )
                     Spacer(modifier = Modifier.height(10.dp))
-                    DetailItem(
-                        icon = Icons.Default.DirectionsBus,
-                        label = "Transport",
-                        value = if (hasTransport) (transportRouteName ?: "Yes") else "No",
-                        valueColor = if (hasTransport) Saffron else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    // Clickable transport item
+                    Surface(
+                        onClick = onTransportClick,
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (hasTransport) Saffron.copy(alpha = 0.1f) else Color(0xFFF1F5F9)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.DirectionsBus,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (hasTransport) Saffron else Color.Gray
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Transport",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = if (hasTransport) (transportRouteName ?: "Active") else "Add",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (hasTransport) Saffron else Color.Gray
+                                )
+                            }
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = "Manage",
+                                modifier = Modifier.size(10.dp),
+                                tint = if (hasTransport) Saffron else Color.Gray
+                            )
+                        }
+                    }
                 }
             }
         }

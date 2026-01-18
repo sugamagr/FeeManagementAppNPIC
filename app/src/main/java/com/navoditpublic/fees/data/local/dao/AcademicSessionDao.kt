@@ -21,6 +21,12 @@ interface AcademicSessionDao {
     @Delete
     suspend fun delete(session: AcademicSessionEntity)
     
+    @Query("DELETE FROM academic_sessions WHERE id = :sessionId")
+    suspend fun deleteById(sessionId: Long)
+    
+    @Query("UPDATE academic_sessions SET is_active = :isActive WHERE id = :sessionId")
+    suspend fun setSessionActive(sessionId: Long, isActive: Boolean)
+    
     @Query("SELECT * FROM academic_sessions WHERE id = :id")
     suspend fun getById(id: Long): AcademicSessionEntity?
     

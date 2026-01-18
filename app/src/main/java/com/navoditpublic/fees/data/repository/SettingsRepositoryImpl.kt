@@ -38,6 +38,14 @@ class SettingsRepositoryImpl @Inject constructor(
         academicSessionDao.delete(session.toEntity())
     }
     
+    override suspend fun deleteSession(sessionId: Long): Result<Unit> = runCatching {
+        academicSessionDao.deleteById(sessionId)
+    }
+    
+    override suspend fun setSessionActive(sessionId: Long, isActive: Boolean): Result<Unit> = runCatching {
+        academicSessionDao.setSessionActive(sessionId, isActive)
+    }
+    
     override suspend fun getSessionById(id: Long): AcademicSession? {
         return academicSessionDao.getById(id)?.let { AcademicSession.fromEntity(it) }
     }

@@ -352,91 +352,189 @@ fun StudentDetailScreen(
                     }
                 }
                 
-                // Family & Contact Section
-                item {
-                    SectionTitle(
-                        title = "Family & Contact",
-                        icon = Icons.Default.Person,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
-                    )
-                }
-                
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column {
-                            PremiumInfoRow(
-                                icon = Icons.Default.Person,
-                                label = "Father",
-                                value = student.fatherName,
-                                showDivider = true
-                            )
-                            
-                            if (student.motherName.isNotBlank()) {
-                                PremiumInfoRow(
-                                    icon = Icons.Default.Person,
-                                    label = "Mother",
-                                    value = student.motherName,
-                                    showDivider = true
-                                )
-                            }
-                            
-                            PremiumInfoRow(
-                                icon = Icons.Default.Phone,
-                                label = "Primary Contact",
-                                value = student.phonePrimary,
-                                showDivider = student.phoneSecondary.isNotBlank() || student.fullAddress.isNotBlank(),
-                                actionIcon = Icons.Default.Call,
-                                onActionClick = {
-                                    val intent = Intent(Intent.ACTION_DIAL).apply {
-                                        data = Uri.parse("tel:${student.phonePrimary}")
-                                    }
-                                    context.startActivity(intent)
-                                },
-                                secondaryActionIcon = Icons.Default.Sms,
-                                onSecondaryActionClick = {
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        data = Uri.parse("sms:${student.phonePrimary}")
-                                    }
-                                    context.startActivity(intent)
+                // Transport Section
+                if (state.transportRoute != null) {
+                    item {
+                        SectionTitle(
+                            title = "Transport",
+                            icon = Icons.Default.DirectionsBus,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
+                        )
+                    }
+                    
+                    item {
+                        Card(
+                            onClick = { navController.navigate(Screen.TransportQuick.createRoute(studentId = studentId, action = "manage")) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Saffron.copy(alpha = 0.1f)
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(Saffron.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.DirectionsBus,
+                                        contentDescription = null,
+                                        tint = Saffron,
+                                        modifier = Modifier.size(24.dp)
+                                    )
                                 }
-                            )
-                            
-                            if (student.phoneSecondary.isNotBlank()) {
-                                PremiumInfoRow(
-                                    icon = Icons.Default.Phone,
-                                    label = "Alternate Contact",
-                                    value = student.phoneSecondary,
-                                    showDivider = student.fullAddress.isNotBlank(),
-                                    actionIcon = Icons.Default.Call,
-                                    onActionClick = {
-                                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                                            data = Uri.parse("tel:${student.phoneSecondary}")
+                                
+                                Spacer(Modifier.width(12.dp))
+                                
+                                Column(Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            state.transportRoute!!.routeName,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = Color(0xFF22C55E).copy(alpha = 0.15f)
+                                        ) {
+                                            Text(
+                                                "● Active",
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF22C55E),
+                                                fontSize = 10.sp
+                                            )
                                         }
-                                        context.startActivity(intent)
                                     }
-                                )
+                                    Text(
+                                        state.transportRoute!!.getFeeForClass(student.currentClass).toRupees() + "/month",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Saffron.copy(alpha = 0.2f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "Manage",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Saffron
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                            contentDescription = null,
+                                            tint = Saffron,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
                             }
-                            
-                            if (student.fullAddress.isNotBlank()) {
-                                PremiumInfoRow(
-                                    icon = Icons.Default.Home,
-                                    label = "Address",
-                                    value = student.fullAddress,
-                                    showDivider = false,
-                                    actionIcon = Icons.Default.ContentCopy,
-                                    onActionClick = {
-                                        clipboardManager.setText(AnnotatedString(student.fullAddress))
+                        }
+                    }
+                } else if (student.hasTransport == false) {
+                    // Show "Add Transport" option for students without transport
+                    item {
+                        SectionTitle(
+                            title = "Transport",
+                            icon = Icons.Default.DirectionsBus,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
+                        )
+                    }
+                    
+                    item {
+                        Card(
+                            onClick = { navController.navigate(Screen.TransportQuick.createRoute(studentId = studentId, action = "enroll")) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF1F5F9)
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFE2E8F0)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.DirectionsBus,
+                                        contentDescription = null,
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                
+                                Spacer(Modifier.width(12.dp))
+                                
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "No Transport",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.Gray
+                                    )
+                                    Text(
+                                        "Tap to enroll in transport",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray.copy(alpha = 0.7f)
+                                    )
+                                }
+                                
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Saffron.copy(alpha = 0.15f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            "Add",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Saffron
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                            contentDescription = null,
+                                            tint = Saffron,
+                                            modifier = Modifier.size(12.dp)
+                                        )
                                     }
-                                )
+                                }
                             }
                         }
                     }
@@ -523,6 +621,96 @@ fun StudentDetailScreen(
                     }
                 }
                 
+                // Family & Contact Section
+                item {
+                    SectionTitle(
+                        title = "Family & Contact",
+                        icon = Icons.Default.Person,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp)
+                    )
+                }
+                
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column {
+                            PremiumInfoRow(
+                                icon = Icons.Default.Person,
+                                label = "Father",
+                                value = student.fatherName,
+                                showDivider = true
+                            )
+                            
+                            if (student.motherName.isNotBlank()) {
+                                PremiumInfoRow(
+                                    icon = Icons.Default.Person,
+                                    label = "Mother",
+                                    value = student.motherName,
+                                    showDivider = true
+                                )
+                            }
+                            
+                            PremiumInfoRow(
+                                icon = Icons.Default.Phone,
+                                label = "Primary Contact",
+                                value = student.phonePrimary,
+                                showDivider = student.phoneSecondary.isNotBlank() || student.fullAddress.isNotBlank(),
+                                actionIcon = Icons.Default.Call,
+                                onActionClick = {
+                                    val intent = Intent(Intent.ACTION_DIAL).apply {
+                                        data = Uri.parse("tel:${student.phonePrimary}")
+                                    }
+                                    context.startActivity(intent)
+                                },
+                                secondaryActionIcon = Icons.Default.Sms,
+                                onSecondaryActionClick = {
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse("sms:${student.phonePrimary}")
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            )
+                            
+                            if (student.phoneSecondary.isNotBlank()) {
+                                PremiumInfoRow(
+                                    icon = Icons.Default.Phone,
+                                    label = "Alternate Contact",
+                                    value = student.phoneSecondary,
+                                    showDivider = student.fullAddress.isNotBlank(),
+                                    actionIcon = Icons.Default.Call,
+                                    onActionClick = {
+                                        val intent = Intent(Intent.ACTION_DIAL).apply {
+                                            data = Uri.parse("tel:${student.phoneSecondary}")
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                )
+                            }
+                            
+                            if (student.fullAddress.isNotBlank()) {
+                                PremiumInfoRow(
+                                    icon = Icons.Default.Home,
+                                    label = "Address",
+                                    value = student.fullAddress,
+                                    showDivider = false,
+                                    actionIcon = Icons.Default.ContentCopy,
+                                    onActionClick = {
+                                        clipboardManager.setText(AnnotatedString(student.fullAddress))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                
                 // Opening Balance Section (only if has opening balance)
                 if (student.openingBalance != 0.0) {
                     item {
@@ -538,18 +726,18 @@ fun StudentDetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
                                 containerColor = if (student.openingBalance > 0) 
                                     MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                            else 
+                                else 
                                     PaidChipBackground.copy(alpha = 0.5f)
                             ),
                             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
@@ -558,8 +746,8 @@ fun StudentDetailScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
+                                ) {
+                                    Text(
                                         "Amount",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -569,7 +757,7 @@ fun StudentDetailScreen(
                                             student.openingBalance.toRupees() + " Due"
                                         else 
                                             (student.openingBalance * -1).toRupees() + " Advance",
-                                style = MaterialTheme.typography.titleMedium,
+                                        style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = if (student.openingBalance > 0) 
                                             MaterialTheme.colorScheme.error
@@ -580,8 +768,8 @@ fun StudentDetailScreen(
                                 
                                 // Date Row (if available)
                                 if (student.openingBalanceDate != null) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -601,93 +789,18 @@ fun StudentDetailScreen(
                                 
                                 // Remarks Row (if available)
                                 if (student.openingBalanceRemarks.isNotBlank()) {
-                                Column {
-                                    Text(
+                                    Column {
+                                        Text(
                                             "Remarks",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
                                             student.openingBalanceRemarks,
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Transport Section (if applicable)
-                if (state.transportRoute != null) {
-                    item {
-                        SectionTitle(
-                            title = "Transport",
-                            icon = Icons.Default.DirectionsBus,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp)
-                        )
-                    }
-                    
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Saffron.copy(alpha = 0.1f)
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(Saffron.copy(alpha = 0.2f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        Icons.Default.DirectionsBus,
-                                        contentDescription = null,
-                                        tint = Saffron,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                
-                                Spacer(Modifier.width(12.dp))
-                                
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        "Route",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        state.transportRoute!!.routeName,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = Saffron.copy(alpha = 0.15f)
-                                ) {
-                                    Text(
-                                        state.transportRoute!!.getFeeForClass(student.currentClass).toRupees() + "/mo",
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Saffron
-                                    )
                                 }
                             }
                         }

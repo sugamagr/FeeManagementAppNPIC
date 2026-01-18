@@ -17,6 +17,10 @@ interface SettingsRepository {
     
     suspend fun deleteSession(session: AcademicSession): Result<Unit>
     
+    suspend fun deleteSession(sessionId: Long): Result<Unit>
+    
+    suspend fun setSessionActive(sessionId: Long, isActive: Boolean): Result<Unit>
+    
     suspend fun getSessionById(id: Long): AcademicSession?
     
     suspend fun getCurrentSession(): AcademicSession?

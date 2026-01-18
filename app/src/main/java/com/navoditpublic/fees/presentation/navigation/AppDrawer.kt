@@ -1,15 +1,9 @@
 package com.navoditpublic.fees.presentation.navigation
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.EaseInOutCubic
-import androidx.compose.animation.core.EaseOutBack
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInHorizontally
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,11 +22,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Class
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DirectionsBus
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,7 +48,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,28 +56,24 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.adamglin.PhosphorIcons
-import com.adamglin.phosphoricons.Duotone
+import com.navoditpublic.fees.R
 import com.navoditpublic.fees.presentation.screens.settings.SettingsViewModel
-import com.navoditpublic.fees.presentation.theme.GlassBorder
-import com.navoditpublic.fees.presentation.theme.GlassWhite
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronAmber
-import com.navoditpublic.fees.presentation.theme.SaffronDark
 import com.navoditpublic.fees.presentation.theme.SaffronDeep
 import kotlinx.coroutines.launch
 
@@ -100,16 +98,6 @@ fun AppDrawerContent(
     var showSeedConfirm by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
     var showRefreshConfirm by remember { mutableStateOf(false) }
-    
-    // Animation state for staggered entry
-    val visibleState = remember { MutableTransitionState(false) }
-    LaunchedEffect(drawerState.isOpen) {
-        if (drawerState.isOpen) {
-            visibleState.targetState = true
-        } else {
-            visibleState.targetState = false
-        }
-    }
     
     // Dialogs
     if (showSeedConfirm) {
@@ -155,7 +143,7 @@ fun AppDrawerContent(
     ModalDrawerSheet(
         modifier = Modifier.width(300.dp),
         drawerContainerColor = MaterialTheme.colorScheme.surface,
-        drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp)
+        drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
     ) {
         Column(
             modifier = Modifier
@@ -163,165 +151,140 @@ fun AppDrawerContent(
                 .verticalScroll(rememberScrollState())
         ) {
             // ==================== HEADER ====================
-            DrawerHeader(currentSession = currentSession, visibleState = visibleState)
+            DrawerHeader(currentSession = currentSession)
             
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // ==================== QUICK ACTIONS ====================
-            AnimatedDrawerSection(visibleState = visibleState, delayIndex = 0) {
-                QuickActionsBar(
-                    navController = navController,
-                    drawerState = drawerState,
-                    scope = scope
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
             // ==================== SCHOOL SECTION ====================
-            AnimatedDrawerSection(visibleState = visibleState, delayIndex = 1) {
-                DrawerCategoryCard(
-                    title = "SCHOOL",
-                    accentColor = SchoolAccent,
-                    items = listOf(
-                        DrawerItemData(
-                            icon = PhosphorIcons.Duotone.Bank,
-                            title = "School Profile",
-                            subtitle = "Name, address, contact details",
-                            route = Screen.SchoolProfile.route
-                        )
-                    ),
-                    currentRoute = currentRoute,
-                    navController = navController,
-                    drawerState = drawerState,
-                    scope = scope
-                )
-            }
+            DrawerCategoryCard(
+                title = "SCHOOL",
+                accentColor = SchoolAccent,
+                items = listOf(
+                    DrawerItemData(
+                        icon = Icons.Outlined.School,
+                        title = "School Profile",
+                        subtitle = "Name, address, contact details",
+                        route = Screen.SchoolProfile.route
+                    )
+                ),
+                currentRoute = currentRoute,
+                navController = navController,
+                drawerState = drawerState,
+                scope = scope
+            )
             
             Spacer(modifier = Modifier.height(12.dp))
             
             // ==================== ACADEMIC SECTION ====================
-            AnimatedDrawerSection(visibleState = visibleState, delayIndex = 2) {
-                DrawerCategoryCard(
-                    title = "ACADEMIC",
-                    accentColor = AcademicAccent,
-                    items = listOf(
-                        DrawerItemData(
-                            icon = PhosphorIcons.Duotone.CalendarDots,
-                            title = "Academic Sessions",
-                            subtitle = "Manage academic years",
-                            route = Screen.AcademicSessions.route
-                        ),
-                        DrawerItemData(
-                            icon = PhosphorIcons.Duotone.Books,
-                            title = "Classes & Sections",
-                            subtitle = "Add or modify classes and sections",
-                            route = Screen.ClassesAndSections.route
-                        )
+            DrawerCategoryCard(
+                title = "ACADEMIC",
+                accentColor = AcademicAccent,
+                items = listOf(
+                    DrawerItemData(
+                        icon = Icons.Outlined.CalendarMonth,
+                        title = "Academic Sessions",
+                        subtitle = "Manage academic years",
+                        route = Screen.AcademicSessions.route
                     ),
-                    currentRoute = currentRoute,
-                    navController = navController,
-                    drawerState = drawerState,
-                    scope = scope
-                )
-            }
+                    DrawerItemData(
+                        icon = Icons.Outlined.Class,
+                        title = "Classes & Sections",
+                        subtitle = "Add or modify classes and sections",
+                        route = Screen.ClassesAndSections.route
+                    )
+                ),
+                currentRoute = currentRoute,
+                navController = navController,
+                drawerState = drawerState,
+                scope = scope
+            )
             
             Spacer(modifier = Modifier.height(12.dp))
             
             // ==================== FEES SECTION ====================
-            AnimatedDrawerSection(visibleState = visibleState, delayIndex = 3) {
-                DrawerCategoryCard(
-                    title = "FEES",
-                    accentColor = FeesAccent,
-                    items = listOf(
-                        DrawerItemData(
-                            icon = PhosphorIcons.Duotone.CurrencyInr,
-                            title = "Fee Structure",
-                            subtitle = "Monthly, annual, admission fees",
-                            route = Screen.FeeStructure.route
-                        ),
-                        DrawerItemData(
-                            icon = PhosphorIcons.Duotone.Bus,
-                            title = "Transport Routes",
-                            subtitle = "Manage transport routes and fees",
-                            route = Screen.TransportRoutes.route
-                        )
+            DrawerCategoryCard(
+                title = "FEES",
+                accentColor = FeesAccent,
+                items = listOf(
+                    DrawerItemData(
+                        icon = Icons.Outlined.Payments,
+                        title = "Fee Structure",
+                        subtitle = "Monthly, annual, admission fees",
+                        route = Screen.FeeStructure.route
                     ),
-                    currentRoute = currentRoute,
-                    navController = navController,
-                    drawerState = drawerState,
-                    scope = scope
-                )
-            }
+                    DrawerItemData(
+                        icon = Icons.Outlined.DirectionsBus,
+                        title = "Transport Routes",
+                        subtitle = "Manage transport routes and fees",
+                        route = Screen.TransportRoutes.route
+                    )
+                ),
+                currentRoute = currentRoute,
+                navController = navController,
+                drawerState = drawerState,
+                scope = scope
+            )
             
             Spacer(modifier = Modifier.height(12.dp))
             
             // ==================== HISTORY SECTION ====================
-            AnimatedDrawerSection(visibleState = visibleState, delayIndex = 4) {
-                DrawerCategoryCard(
-                    title = "HISTORY",
-                    accentColor = HistoryAccent,
-                    items = listOf(
-                        DrawerItemData(
-                            icon = PhosphorIcons.Duotone.ClockCounterClockwise,
-                            title = "Audit Log",
-                            subtitle = "View all changes and revert if needed",
-                            route = Screen.AuditLog.route
-                        )
-                    ),
-                    currentRoute = currentRoute,
-                    navController = navController,
-                    drawerState = drawerState,
-                    scope = scope
-                )
-            }
+            DrawerCategoryCard(
+                title = "HISTORY",
+                accentColor = HistoryAccent,
+                items = listOf(
+                    DrawerItemData(
+                        icon = Icons.Outlined.History,
+                        title = "Audit Log",
+                        subtitle = "View all changes and revert if needed",
+                        route = Screen.AuditLog.route
+                    )
+                ),
+                currentRoute = currentRoute,
+                navController = navController,
+                drawerState = drawerState,
+                scope = scope
+            )
             
             Spacer(modifier = Modifier.height(12.dp))
             
             // ==================== HELP & INFO SECTION ====================
-            AnimatedDrawerSection(visibleState = visibleState, delayIndex = 5) {
-                DrawerCategoryCard(
-                    title = "HELP & INFO",
-                    accentColor = HelpAccent,
-                    items = listOf(
-                        DrawerItemData(
-                            icon = PhosphorIcons.Duotone.Lifebuoy,
-                            title = "How to Use",
-                            subtitle = "Complete guide to using the app",
-                            route = Screen.HowToUse.route
-                        ),
-                        DrawerItemData(
-                            icon = PhosphorIcons.Duotone.Info,
-                            title = "About",
-                            subtitle = "App version and developer info",
-                            route = Screen.About.route
-                        )
+            DrawerCategoryCard(
+                title = "HELP & INFO",
+                accentColor = HelpAccent,
+                items = listOf(
+                    DrawerItemData(
+                        icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                        title = "How to Use",
+                        subtitle = "Complete guide to using the app",
+                        route = Screen.HowToUse.route
                     ),
-                    currentRoute = currentRoute,
-                    navController = navController,
-                    drawerState = drawerState,
-                    scope = scope
-                )
-            }
+                    DrawerItemData(
+                        icon = Icons.Outlined.Info,
+                        title = "About",
+                        subtitle = "App version and developer info",
+                        route = Screen.About.route
+                    )
+                ),
+                currentRoute = currentRoute,
+                navController = navController,
+                drawerState = drawerState,
+                scope = scope
+            )
             
             Spacer(modifier = Modifier.height(12.dp))
             
             // ==================== DEVELOPER SECTION ====================
-            AnimatedDrawerSection(visibleState = visibleState, delayIndex = 6) {
-                DrawerDevSection(
-                    hasDemoData = state.hasDemoData,
-                    onLoadDemo = { showSeedConfirm = true },
-                    onRefreshDemo = { showRefreshConfirm = true },
-                    onClearDemo = { showClearConfirm = true }
-                )
-            }
+            DrawerDevSection(
+                hasDemoData = state.hasDemoData,
+                onLoadDemo = { showSeedConfirm = true },
+                onRefreshDemo = { showRefreshConfirm = true },
+                onClearDemo = { showClearConfirm = true }
+            )
             
             Spacer(modifier = Modifier.height(16.dp))
             
             // ==================== FOOTER ====================
-            AnimatedDrawerSection(visibleState = visibleState, delayIndex = 7) {
-                DrawerFooter()
-            }
+            DrawerFooter()
             
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -330,30 +293,22 @@ fun AppDrawerContent(
 
 // ==================== HEADER COMPONENT ====================
 @Composable
-private fun DrawerHeader(
-    currentSession: String?,
-    visibleState: MutableTransitionState<Boolean>
-) {
+private fun DrawerHeader(currentSession: String?) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp)
             .drawBehind {
-                // Decorative circles
+                // Decorative circle - top right
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.12f),
-                    radius = 140.dp.toPx(),
-                    center = Offset(size.width * 0.85f, size.height * 0.15f)
-                )
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.08f),
+                    color = Color.White.copy(alpha = 0.1f),
                     radius = 100.dp.toPx(),
-                    center = Offset(size.width * 0.1f, size.height * 0.85f)
+                    center = Offset(size.width * 0.95f, size.height * 0.1f)
                 )
+                // Decorative circle - bottom left
                 drawCircle(
                     color = Color.White.copy(alpha = 0.06f),
-                    radius = 60.dp.toPx(),
-                    center = Offset(size.width * 0.5f, size.height * 0.3f)
+                    radius = 70.dp.toPx(),
+                    center = Offset(size.width * 0.05f, size.height * 0.9f)
                 )
             }
             .background(
@@ -363,180 +318,64 @@ private fun DrawerHeader(
                     end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
                 )
             )
+            .padding(20.dp)
     ) {
-        // Content
-        AnimatedVisibility(
-            visibleState = visibleState,
-            enter = fadeIn(tween(400, delayMillis = 100)) + 
-                    slideInHorizontally(tween(400, delayMillis = 100, easing = EaseOutBack)) { -50 }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Bottom
+            // School Logo
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White,
+                shadowElevation = 6.dp,
+                modifier = Modifier.size(64.dp)
             ) {
-                // Logo/Icon with glow effect
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(60.dp)
-                ) {
-                    // Glow behind
-                    Box(
-                        modifier = Modifier
-                            .size(60.dp)
-                            .blur(12.dp)
-                            .background(Color.White.copy(alpha = 0.3f), CircleShape)
-                    )
-                    // Icon container
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color.White.copy(alpha = 0.2f),
-                        modifier = Modifier.size(52.dp)
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Icon(
-                                imageVector = PhosphorIcons.Duotone.GraduationCap,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
+                Image(
+                    painter = painterResource(id = R.mipmap.npic),
+                    contentDescription = "School Logo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            // Text content
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 // School name
                 Text(
                     text = "NPIC Fees",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
-                    letterSpacing = (-0.5).sp
+                    letterSpacing = (-0.3).sp
                 )
                 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 
-                // Session badge - glassmorphism style
+                // Session badge
                 if (currentSession != null) {
                     Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = GlassWhite,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder),
-                        modifier = Modifier
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.White.copy(alpha = 0.95f),
                     ) {
                         Text(
-                            text = "Session $currentSession",
+                            text = currentSession,
                             style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            fontWeight = FontWeight.Bold,
+                            color = SaffronDeep,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                         )
                     }
                 }
             }
         }
-    }
-}
-
-// ==================== QUICK ACTIONS BAR ====================
-@Composable
-private fun QuickActionsBar(
-    navController: NavController,
-    drawerState: DrawerState,
-    scope: kotlinx.coroutines.CoroutineScope
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        QuickActionButton(
-            icon = PhosphorIcons.Duotone.MagnifyingGlass,
-            label = "Search",
-            onClick = {
-                scope.launch {
-                    drawerState.close()
-                    navController.navigate(Screen.Students.route)
-                }
-            }
-        )
-        QuickActionButton(
-            icon = PhosphorIcons.Duotone.ChartBar,
-            label = "Reports",
-            onClick = {
-                scope.launch {
-                    drawerState.close()
-                    navController.navigate(Screen.Reports.route)
-                }
-            }
-        )
-        QuickActionButton(
-            icon = Icons.Default.Add,
-            label = "Collect",
-            isPrimary = true,
-            onClick = {
-                scope.launch {
-                    drawerState.close()
-                    navController.navigate(Screen.FeeCollection.route)
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun QuickActionButton(
-    icon: ImageVector,
-    label: String,
-    isPrimary: Boolean = false,
-    onClick: () -> Unit
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.92f else 1f,
-        animationSpec = tween(100),
-        label = "scale"
-    )
-    
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .scale(scale)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-    ) {
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = if (isPrimary) Saffron else MaterialTheme.colorScheme.surfaceVariant,
-            shadowElevation = if (isPrimary) 4.dp else 0.dp,
-            modifier = Modifier.size(52.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = if (isPrimary) Color.White else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -644,12 +483,12 @@ private fun DrawerMenuItem(
             isPressed -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             else -> Color.Transparent
         },
-        animationSpec = tween(150),
+        animationSpec = tween(100),
         label = "bg"
     )
     
     val iconScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.9f else 1f,
+        targetValue = if (isPressed) 0.95f else 1f,
         animationSpec = tween(100),
         label = "iconScale"
     )
@@ -716,10 +555,10 @@ private fun DrawerMenuItem(
         
         // Arrow indicator
         Icon(
-            imageVector = PhosphorIcons.Duotone.CaretRight,
+            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -774,14 +613,14 @@ private fun DrawerDevSection(
             Column {
                 if (!hasDemoData) {
                     DevMenuItem(
-                        icon = PhosphorIcons.Duotone.Flask,
+                        icon = Icons.Outlined.Science,
                         title = "Load Demo Data",
                         subtitle = "Add 150 test students + receipts for testing",
                         onClick = onLoadDemo
                     )
                 } else {
                     DevMenuItem(
-                        icon = PhosphorIcons.Duotone.Flask,
+                        icon = Icons.Outlined.Science,
                         title = "Refresh Demo Data",
                         subtitle = "Clear & reload with fresh receipts",
                         onClick = onRefreshDemo
@@ -792,7 +631,7 @@ private fun DrawerDevSection(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     DevMenuItem(
-                        icon = PhosphorIcons.Duotone.Trash,
+                        icon = Icons.Outlined.Delete,
                         title = "Clear Demo Data",
                         subtitle = "Remove all test data (DEMO prefix)",
                         isDestructive = true,
@@ -884,63 +723,6 @@ private fun DrawerFooter() {
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )
         }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        // Footer links
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            Text(
-                text = "Help",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                modifier = Modifier.clickable { }
-            )
-            Text(
-                text = "Privacy",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                modifier = Modifier.clickable { }
-            )
-            Text(
-                text = "Support",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                modifier = Modifier.clickable { }
-            )
-        }
-    }
-}
-
-// ==================== ANIMATED SECTION WRAPPER ====================
-@Composable
-private fun AnimatedDrawerSection(
-    visibleState: MutableTransitionState<Boolean>,
-    delayIndex: Int,
-    content: @Composable () -> Unit
-) {
-    AnimatedVisibility(
-        visibleState = visibleState,
-        enter = fadeIn(
-            animationSpec = tween(
-                durationMillis = 300,
-                delayMillis = delayIndex * 40,
-                easing = FastOutSlowInEasing
-            )
-        ) + slideInHorizontally(
-            animationSpec = tween(
-                durationMillis = 350,
-                delayMillis = delayIndex * 40,
-                easing = EaseInOutCubic
-            ),
-            initialOffsetX = { -40 }
-        )
-    ) {
-        content()
     }
 }
 
