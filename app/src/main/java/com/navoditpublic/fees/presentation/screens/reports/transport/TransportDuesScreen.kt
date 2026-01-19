@@ -26,7 +26,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -377,9 +379,10 @@ private fun RouteWiseSummaryPage(
     onCallClick: (TransportStudentData) -> Unit,
     onWhatsAppClick: (TransportStudentData) -> Unit
 ) {
+    val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(bottom = 24.dp + navigationBarPadding)
     ) {
         // Metrics Dashboard (scrolls with content)
         item {
@@ -465,9 +468,10 @@ private fun StudentDetailsPage(
     onCallClick: (TransportStudentData) -> Unit,
     onWhatsAppClick: (TransportStudentData) -> Unit
 ) {
+    val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(bottom = 24.dp + navigationBarPadding)
     ) {
         // Metrics Dashboard (scrolls with content)
         item {
@@ -1530,8 +1534,8 @@ private fun TransportDataTable(
                     TableHeader("Name", 140.dp)
                     TableHeader("Class", 60.dp)
                     TableHeader("Route", 100.dp)
-                    TableHeader("Fee", 80.dp)
-                    TableHeader("Dues", 80.dp)
+                    TableHeader("Transport", 80.dp)
+                    TableHeader("All Dues", 80.dp)
                     TableHeader("Actions", 70.dp)
                 }
             }
@@ -1650,7 +1654,7 @@ private fun TransportTableRow(
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = student.totalFee.toRupees(),
+            text = student.transportFee.toRupees(),
             style = MaterialTheme.typography.bodySmall,
             color = TextPrimary,
             modifier = Modifier.width(80.dp),

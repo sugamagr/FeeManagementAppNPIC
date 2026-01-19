@@ -28,6 +28,13 @@ enum class DuesReportSortOption(val displayName: String) {
     ACCOUNT_NUMBER("A/C Number")
 }
 
+// Three-state transport filter
+enum class TransportFilter(val displayName: String) {
+    ALL("All Students"),
+    WITH_TRANSPORT("Transport Only"),
+    WITHOUT_TRANSPORT("Non-Transport Only")
+}
+
 // Available columns for dues report
 enum class DuesReportColumn(val displayName: String, val key: String) {
     SR_NUMBER("SR Number", "sr_number"),
@@ -74,7 +81,7 @@ data class CustomDuesReportState(
     // Filters
     val selectedClass: String = "All",
     val showOnlyWithDues: Boolean = true,  // Default: show only students with dues
-    val showOnlyWithTransport: Boolean = true,  // Default: show students with transport
+    val transportFilter: TransportFilter = TransportFilter.ALL,  // Default: show all students
     val minimumDuesAmount: Double = 0.0,
     val searchQuery: String = "",
     val sortOption: DuesReportSortOption = DuesReportSortOption.DUES_HIGH_TO_LOW,  // Default sort
@@ -188,8 +195,8 @@ class CustomDuesReportViewModel @Inject constructor(
         applyFilters()
     }
     
-    fun toggleShowOnlyWithTransport() {
-        _state.value = _state.value.copy(showOnlyWithTransport = !_state.value.showOnlyWithTransport)
+    fun updateTransportFilter(filter: TransportFilter) {
+        _state.value = _state.value.copy(transportFilter = filter)
         applyFilters()
     }
     
@@ -215,11 +222,11 @@ class CustomDuesReportViewModel @Inject constructor(
             val matchesClass = _state.value.selectedClass == "All" || 
                               data.student.currentClass == _state.value.selectedClass
             val matchesDues = !_state.value.showOnlyWithDues || data.netDues > 0
-            // Transport filter: ON = show with transport, OFF = hide with transport (show non-transport)
-            val matchesTransport = if (_state.value.showOnlyWithTransport) {
-                data.student.hasTransport // Show only transport students
-            } else {
-                !data.student.hasTransport // Hide transport students (show non-transport)
+            // Three-state transport filter
+            val matchesTransport = when (_state.value.transportFilter) {
+                TransportFilter.ALL -> true // Show all students
+                TransportFilter.WITH_TRANSPORT -> data.student.hasTransport // Show only transport students
+                TransportFilter.WITHOUT_TRANSPORT -> !data.student.hasTransport // Show only non-transport students
             }
             val matchesMinDues = data.netDues >= _state.value.minimumDuesAmount
             val matchesSearch = _state.value.searchQuery.isBlank() ||
@@ -271,7 +278,7 @@ class CustomDuesReportViewModel @Inject constructor(
                 append("{")
                 append("\"selectedClass\":\"${_state.value.selectedClass}\",")
                 append("\"showOnlyWithDues\":${_state.value.showOnlyWithDues},")
-                append("\"showOnlyWithTransport\":${_state.value.showOnlyWithTransport},")
+                append("\"transportFilter\":\"${_state.value.transportFilter.name}\",")
                 append("\"minimumDuesAmount\":${_state.value.minimumDuesAmount}")
                 append("}")
             }
@@ -303,14 +310,27 @@ class CustomDuesReportViewModel @Inject constructor(
             val filterConfig = view.filterConfig
             val selectedClass = Regex("\"selectedClass\":\"([^\"]+)\"").find(filterConfig)?.groupValues?.get(1) ?: "All"
             val showOnlyWithDues = filterConfig.contains("\"showOnlyWithDues\":true")
-            val showOnlyWithTransport = filterConfig.contains("\"showOnlyWithTransport\":true")
             val minimumDuesAmount = Regex("\"minimumDuesAmount\":([0-9.]+)").find(filterConfig)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+            
+            // Parse transport filter with backward compatibility
+            val transportFilter = Regex("\"transportFilter\":\"([^\"]+)\"").find(filterConfig)?.groupValues?.get(1)?.let {
+                try { TransportFilter.valueOf(it) } catch (e: Exception) { null }
+            } ?: run {
+                // Backward compatibility: convert old showOnlyWithTransport boolean to new enum
+                if (filterConfig.contains("\"showOnlyWithTransport\":true")) {
+                    TransportFilter.WITH_TRANSPORT
+                } else if (filterConfig.contains("\"showOnlyWithTransport\":false")) {
+                    TransportFilter.WITHOUT_TRANSPORT
+                } else {
+                    TransportFilter.ALL
+                }
+            }
             
             _state.value = _state.value.copy(
                 selectedColumns = if (columns.isNotEmpty()) columns else _state.value.selectedColumns,
                 selectedClass = selectedClass,
                 showOnlyWithDues = showOnlyWithDues,
-                showOnlyWithTransport = showOnlyWithTransport,
+                transportFilter = transportFilter,
                 minimumDuesAmount = minimumDuesAmount,
                 currentViewId = view.id,
                 showLoadDialog = false

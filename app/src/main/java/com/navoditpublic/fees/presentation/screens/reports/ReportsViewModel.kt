@@ -3,6 +3,7 @@ package com.navoditpublic.fees.presentation.screens.reports
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.domain.repository.FeeRepository
+import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
 import com.navoditpublic.fees.util.DateUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,6 +20,7 @@ data class ReportsSummaryState(
     // Dues summary
     val totalPendingDues: Double = 0.0,
     val totalStudents: Int = 0,
+    val totalClasses: Int = 0,
     // Collection summary
     val todayCollection: Double = 0.0,
     val monthCollection: Double = 0.0,
@@ -28,7 +31,8 @@ data class ReportsSummaryState(
 @HiltViewModel
 class ReportsViewModel @Inject constructor(
     private val feeRepository: FeeRepository,
-    private val studentRepository: StudentRepository
+    private val studentRepository: StudentRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
     
     private val _state = MutableStateFlow(ReportsSummaryState())
@@ -46,6 +50,9 @@ class ReportsViewModel @Inject constructor(
                 val startOfMonth = DateUtils.getStartOfMonth()
                 val endOfMonth = DateUtils.getEndOfMonth()
                 
+                // Get class count separately (not a flow)
+                val classCount = settingsRepository.getAllActiveClasses().first().size
+                
                 combine(
                     feeRepository.getTotalPendingDues(),
                     feeRepository.getDailyCollectionTotal(System.currentTimeMillis()),
@@ -57,6 +64,7 @@ class ReportsViewModel @Inject constructor(
                         isLoading = false,
                         totalPendingDues = totalDues ?: 0.0,
                         totalStudents = totalStudents,
+                        totalClasses = classCount,
                         todayCollection = todayCollection ?: 0.0,
                         monthCollection = monthCollection ?: 0.0,
                         todayReceiptCount = todayReceipts.size,

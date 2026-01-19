@@ -28,7 +28,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -84,8 +86,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -151,6 +157,7 @@ fun CustomDuesReportScreen(
     
     // Save View Dialog
     if (state.showSaveDialog) {
+        val saveViewFocusManager = LocalFocusManager.current
         StyledAlertDialog(
             title = "Save View",
             onDismiss = viewModel::dismissDialogs,
@@ -172,6 +179,15 @@ fun CustomDuesReportScreen(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Saffron,
                             cursorColor = Saffron
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (state.viewNameInput.isNotBlank()) {
+                                    viewModel.saveCurrentView()
+                                }
+                                saveViewFocusManager.clearFocus()
+                            }
                         )
                     )
                 }
@@ -252,6 +268,7 @@ fun CustomDuesReportScreen(
         containerColor = Cream,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { paddingValues ->
+        val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         if (state.isLoading) {
             LoadingScreen(modifier = Modifier.padding(paddingValues))
         } else {
@@ -259,7 +276,7 @@ fun CustomDuesReportScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
-                contentPadding = PaddingValues(bottom = 32.dp)
+                contentPadding = PaddingValues(bottom = 32.dp + navigationBarPadding)
             ) {
                 // Gradient Header with Floating Actions
                 item {
@@ -404,26 +421,38 @@ fun CustomDuesReportScreen(
                                         )
                                     }
                                     
-                                    // Toggle Switches with dynamic subtexts
-                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        FilterToggleRow(
-                                            label = "Dues Filter",
-                                            subtitle = if (state.showOnlyWithDues) 
-                                                "Showing only students with dues" 
-                                            else 
-                                                "Showing all students",
-                                            checked = state.showOnlyWithDues,
-                                            onCheckedChange = { viewModel.toggleShowOnlyWithDues() }
+                                    // Dues Toggle
+                                    FilterToggleRow(
+                                        label = "Dues Filter",
+                                        subtitle = if (state.showOnlyWithDues) 
+                                            "Showing only students with dues" 
+                                        else 
+                                            "Showing all students",
+                                        checked = state.showOnlyWithDues,
+                                        onCheckedChange = { viewModel.toggleShowOnlyWithDues() }
+                                    )
+                                    
+                                    // Transport Filter - Three-state chips
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            "Transport",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextTertiary,
+                                            fontWeight = FontWeight.Medium
                                         )
-                                        FilterToggleRow(
-                                            label = "Transport Filter",
-                                            subtitle = if (state.showOnlyWithTransport) 
-                                                "Showing students with transport" 
-                                            else 
-                                                "Hiding students with transport",
-                                            checked = state.showOnlyWithTransport,
-                                            onCheckedChange = { viewModel.toggleShowOnlyWithTransport() }
-                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            TransportFilter.entries.forEach { filter ->
+                                                TransportFilterChip(
+                                                    label = filter.displayName,
+                                                    isSelected = state.transportFilter == filter,
+                                                    onClick = { viewModel.updateTransportFilter(filter) },
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1111,6 +1140,45 @@ fun ClassChip(
 }
 
 @Composable
+fun TransportFilterChip(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) Saffron else Color.White,
+        label = "bg"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (isSelected) Color.White else TextSecondary,
+        label = "content"
+    )
+    
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(backgroundColor)
+            .then(
+                if (!isSelected) Modifier.border(1.dp, DividerSoft, RoundedCornerShape(12.dp))
+                else Modifier
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            color = contentColor,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
 fun FilterToggleRow(
     label: String,
     subtitle: String,
@@ -1538,6 +1606,10 @@ private fun buildFilterSummary(state: CustomDuesReportState): String {
     val parts = mutableListOf<String>()
     if (state.selectedClass != "All") parts.add(state.selectedClass)
     parts.add(if (state.showOnlyWithDues) "With Dues" else "All Students")
-    parts.add(if (state.showOnlyWithTransport) "With Transport" else "No Transport")
+    when (state.transportFilter) {
+        TransportFilter.ALL -> { /* Don't add anything for "All" */ }
+        TransportFilter.WITH_TRANSPORT -> parts.add("Transport")
+        TransportFilter.WITHOUT_TRANSPORT -> parts.add("Non-Transport")
+    }
     return parts.joinToString(" · ")
 }

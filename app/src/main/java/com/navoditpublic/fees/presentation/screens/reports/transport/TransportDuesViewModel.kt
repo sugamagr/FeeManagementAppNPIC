@@ -40,13 +40,14 @@ data class TransportStudentData(
     val routeId: Long,
     val routeName: String,
     val monthlyFee: Double,
-    val totalFee: Double,        // 11 months
-    val paidAmount: Double,
-    val netDues: Double,
+    val transportFee: Double,    // 11 months transport fee only
+    val totalExpectedFee: Double, // All fees (tuition, transport, admission, etc.)
+    val totalPaid: Double,
+    val netDues: Double,          // All outstanding dues from ledger
     val isPaid: Boolean
 ) {
     val collectionRate: Float
-        get() = if (totalFee > 0) (paidAmount / totalFee).toFloat().coerceIn(0f, 1f) else 1f
+        get() = if (totalExpectedFee > 0) (totalPaid / totalExpectedFee).toFloat().coerceIn(0f, 1f) else 1f
 }
 
 // Route summary data
@@ -129,43 +130,39 @@ class TransportDuesViewModel @Inject constructor(
                 // Filter students with transport
                 val transportStudents = allStudents.filter { it.hasTransport && it.transportRouteId != null }
                 
-                // Calculate transport dues for each student
+                // Calculate ALL dues for each student with transport
+                // Note: This shows total outstanding dues (tuition + transport + admission etc.)
+                // not just transport-specific dues
                 val studentDataList = transportStudents.mapNotNull { student ->
                     val route = routes.find { it.id == student.transportRouteId } ?: return@mapNotNull null
                     val monthlyFee = route.getFeeForClass(student.currentClass)
-                    val totalFee = monthlyFee * TRANSPORT_MONTHS
+                    val transportFee = monthlyFee * TRANSPORT_MONTHS
                     
-                    // Get transport-specific payments
-                    // Calculate based on expected fees and payments ratio
-                    // Use ledger as single source of truth - includes all fees (opening balance, tuition, transport, admission)
+                    // Use ledger as single source of truth - includes ALL fees
                     val totalExpectedFee = feeRepository.getTotalDebits(student.id)
-                    
-                    // Transport dues ratio (transport fee / total expected fee)
-                    val transportRatio = if (totalExpectedFee > 0) totalFee / totalExpectedFee else 0.0
-                    
-                    // Estimate transport payment based on ratio
                     val totalPaid = feeRepository.getTotalCredits(student.id)
-                    val estimatedTransportPaid = (totalPaid * transportRatio).coerceAtMost(totalFee)
-                    val transportDues = (totalFee - estimatedTransportPaid).coerceAtLeast(0.0)
+                    val netDues = feeRepository.getCurrentBalance(student.id)
                     
                     TransportStudentData(
                         student = student,
                         routeId = route.id,
                         routeName = route.routeName,
                         monthlyFee = monthlyFee,
-                        totalFee = totalFee,
-                        paidAmount = estimatedTransportPaid,
-                        netDues = transportDues,
-                        isPaid = transportDues <= 0
+                        transportFee = transportFee,
+                        totalExpectedFee = totalExpectedFee,
+                        totalPaid = totalPaid,
+                        netDues = netDues,
+                        isPaid = netDues <= 0
                     )
                 }
                 
-                // Calculate route summaries
+                // Calculate route summaries (based on ALL fees, not just transport)
+                // Only count positive dues (exclude overpayments/advances)
                 val routeSummaries = routes.map { route ->
                     val routeStudents = studentDataList.filter { it.routeId == route.id }
-                    val expected = routeStudents.sumOf { it.totalFee }
-                    val collected = routeStudents.sumOf { it.paidAmount }
-                    val pending = routeStudents.sumOf { it.netDues }
+                    val expected = routeStudents.sumOf { it.totalExpectedFee }
+                    val collected = routeStudents.sumOf { it.totalPaid }
+                    val pending = routeStudents.sumOf { it.netDues.coerceAtLeast(0.0) }
                     
                     RouteSummary(
                         routeId = route.id,
@@ -179,10 +176,11 @@ class TransportDuesViewModel @Inject constructor(
                 }.filter { it.studentCount > 0 }
                     .sortedByDescending { it.pendingTotal }
                 
-                // Calculate overall metrics
-                val totalExpected = studentDataList.sumOf { it.totalFee }
-                val totalCollected = studentDataList.sumOf { it.paidAmount }
-                val totalDues = studentDataList.sumOf { it.netDues }
+                // Calculate overall metrics (based on ALL fees)
+                // Only count positive dues (exclude overpayments/advances)
+                val totalExpected = studentDataList.sumOf { it.totalExpectedFee }
+                val totalCollected = studentDataList.sumOf { it.totalPaid }
+                val totalDues = studentDataList.sumOf { it.netDues.coerceAtLeast(0.0) }
                 
                 // Get unique classes from transport students
                 val uniqueClasses = studentDataList.map { it.student.currentClass }
@@ -322,7 +320,7 @@ class TransportDuesViewModel @Inject constructor(
     fun exportToPdf(context: Context) {
         viewModelScope.launch {
             try {
-                val headers = listOf("A/C No", "Name", "Class", "Father", "Route", "Fee", "Paid", "Dues")
+                val headers = listOf("A/C No", "Name", "Class", "Father", "Route", "Total Fee", "Paid", "Dues")
                 val rows = _state.value.filteredStudents.map { data ->
                     listOf(
                         data.student.accountNumber,
@@ -330,8 +328,8 @@ class TransportDuesViewModel @Inject constructor(
                         data.student.currentClass,
                         data.student.fatherName,
                         data.routeName,
-                        "₹${data.totalFee.toLong()}",
-                        "₹${data.paidAmount.toLong()}",
+                        "₹${data.totalExpectedFee.toLong()}",
+                        "₹${data.totalPaid.toLong()}",
                         "₹${data.netDues.toLong()}"
                     )
                 }
@@ -342,13 +340,14 @@ class TransportDuesViewModel @Inject constructor(
                 
                 com.navoditpublic.fees.util.PdfGenerator.generateReport(
                     context = context,
-                    title = "Transport Dues Report",
+                    title = "Transport Students - All Dues Report",
                     headers = headers,
                     rows = rows,
                     summary = mapOf(
                         "Total Students" to _state.value.filteredStudents.size.toString(),
-                        "Total Dues" to "₹${_state.value.filteredStudents.sumOf { it.netDues }.toLong()}",
-                        "Session" to _state.value.sessionName
+                        "Total Dues" to "₹${_state.value.filteredStudents.sumOf { it.netDues.coerceAtLeast(0.0) }.toLong()}",
+                        "Session" to _state.value.sessionName,
+                        "Note" to "Shows all dues (tuition, transport, admission etc.) for transport students"
                     ),
                     fileName = fileName
                 )
@@ -365,7 +364,7 @@ class TransportDuesViewModel @Inject constructor(
     fun exportToExcel(context: Context) {
         viewModelScope.launch {
             try {
-                val headers = listOf("A/C No", "Name", "Class", "Father Name", "Route", "Monthly Fee", "Total Fee", "Paid", "Dues", "Phone")
+                val headers = listOf("A/C No", "Name", "Class", "Father Name", "Route", "Transport Fee/Mo", "Total Fee", "Paid", "Dues", "Phone")
                 val rows = _state.value.filteredStudents.map { data ->
                     listOf(
                         data.student.accountNumber,
@@ -374,8 +373,8 @@ class TransportDuesViewModel @Inject constructor(
                         data.student.fatherName,
                         data.routeName,
                         data.monthlyFee.toLong().toString(),
-                        data.totalFee.toLong().toString(),
-                        data.paidAmount.toLong().toString(),
+                        data.totalExpectedFee.toLong().toString(),
+                        data.totalPaid.toLong().toString(),
                         data.netDues.toLong().toString(),
                         data.student.phonePrimary
                     )
@@ -385,18 +384,19 @@ class TransportDuesViewModel @Inject constructor(
                     .format(java.util.Date())
                 val fileName = "TransportDues_$timestamp.csv"
                 
-                // Numeric columns: Monthly Fee (5), Total Fee (6), Paid (7), Dues (8)
+                // Numeric columns: Transport Fee/Mo (5), Total Fee (6), Paid (7), Dues (8)
                 com.navoditpublic.fees.util.ExcelGenerator.generateReport(
                     context = context,
-                    title = "Transport Dues Report",
+                    title = "Transport Students - All Dues Report",
                     headers = headers,
                     rows = rows,
                     summary = mapOf(
                         "Total Students" to _state.value.filteredStudents.size.toString(),
-                        "Total Expected" to _state.value.filteredStudents.sumOf { it.totalFee }.toLong().toString(),
-                        "Total Collected" to _state.value.filteredStudents.sumOf { it.paidAmount }.toLong().toString(),
-                        "Total Dues" to _state.value.filteredStudents.sumOf { it.netDues }.toLong().toString(),
-                        "Session" to _state.value.sessionName
+                        "Total Expected" to _state.value.filteredStudents.sumOf { it.totalExpectedFee }.toLong().toString(),
+                        "Total Collected" to _state.value.filteredStudents.sumOf { it.totalPaid }.toLong().toString(),
+                        "Total Dues" to _state.value.filteredStudents.sumOf { it.netDues.coerceAtLeast(0.0) }.toLong().toString(),
+                        "Session" to _state.value.sessionName,
+                        "Note" to "Shows all dues (tuition, transport, admission etc.) for transport students"
                     ),
                     fileName = fileName,
                     numericColumns = setOf(5, 6, 7, 8)

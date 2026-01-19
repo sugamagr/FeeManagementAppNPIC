@@ -70,8 +70,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -270,17 +276,18 @@ fun ClassWiseScreen(
     }
     
     // Reminder Preview Bottom Sheet
-    if (showReminderSheet && state.selectedClassForReminder != null) {
-        ModalBottomSheet(
-            onDismissRequest = { 
-                showReminderSheet = false
-                viewModel.selectClassForReminder(null)
-            },
-            sheetState = reminderSheetState,
-            containerColor = Color.White
-        ) {
-            ReminderPreviewContent(
-                classSummary = state.selectedClassForReminder!!,
+    if (showReminderSheet) {
+        state.selectedClassForReminder?.let { classSummary ->
+            ModalBottomSheet(
+                onDismissRequest = { 
+                    showReminderSheet = false
+                    viewModel.selectClassForReminder(null)
+                },
+                sheetState = reminderSheetState,
+                containerColor = Color.White
+            ) {
+                ReminderPreviewContent(
+                    classSummary = classSummary,
                 templates = state.reminderTemplates,
                 selectedTemplate = state.selectedTemplate,
                 onTemplateSelect = { viewModel.selectTemplate(it) },
@@ -301,15 +308,16 @@ fun ClassWiseScreen(
                     viewModel.selectClassForReminder(null)
                 }
             )
+            }
         }
     }
     
     // Call List Bottom Sheet
-    if (showCallSheet && state.selectedClassForReminder != null) {
-        val selectedClass = state.selectedClassForReminder!!
-        val studentsWithPhone = selectedClass.studentsWithDues.filter { it.hasPhone }
-        
-        ModalBottomSheet(
+    if (showCallSheet) {
+        state.selectedClassForReminder?.let { selectedClass ->
+            val studentsWithPhone = selectedClass.studentsWithDues.filter { it.hasPhone }
+            
+            ModalBottomSheet(
             onDismissRequest = { 
                 showCallSheet = false
                 viewModel.selectClassForReminder(null)
@@ -336,14 +344,16 @@ fun ClassWiseScreen(
                     viewModel.selectClassForReminder(null)
                 }
             )
+            }
         }
     }
     
     // Sending Progress Dialog
-    if (showSendingProgress && state.selectedClassForReminder != null) {
-        val studentsToRemind = state.selectedClassForReminder!!.studentsWithDues.filter { it.hasPhone }
-        
-        SendingProgressDialog(
+    if (showSendingProgress) {
+        state.selectedClassForReminder?.let { classForReminder ->
+            val studentsToRemind = classForReminder.studentsWithDues.filter { it.hasPhone }
+            
+            SendingProgressDialog(
             students = studentsToRemind,
             currentIndex = currentSendingIndex,
             sentCount = sentCount,
@@ -383,6 +393,7 @@ fun ClassWiseScreen(
                 ).show()
             }
         )
+        }
     }
     
     // Template Manager Dialog
@@ -410,17 +421,15 @@ fun ClassWiseScreen(
         TemplateEditorDialog(
             template = editingTemplate,
             onSave = { name, hindi, english ->
-                if (editingTemplate != null) {
+                editingTemplate?.let { template ->
                     viewModel.updateTemplate(
-                        editingTemplate!!.copy(
+                        template.copy(
                             name = name,
                             hindiMessage = hindi,
                             englishMessage = english
                         )
                     )
-                } else {
-                    viewModel.addTemplate(name, hindi, english)
-                }
+                } ?: viewModel.addTemplate(name, hindi, english)
                 showTemplateEditor = false
                 editingTemplate = null
             },
@@ -1282,8 +1291,7 @@ private fun CallListContent(
     }
     
     // Phone selection dialog for multiple numbers
-    if (selectedPhoneDialog != null) {
-        val student = selectedPhoneDialog!!
+    selectedPhoneDialog?.let { student ->
         AlertDialog(
             onDismissRequest = { selectedPhoneDialog = null },
             containerColor = Color.White,
@@ -2142,6 +2150,10 @@ private fun TemplateEditorDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                val templateFocusManager = LocalFocusManager.current
+                val hindiFocus = remember { FocusRequester() }
+                val englishFocus = remember { FocusRequester() }
+                
                 Text(
                     text = "Use placeholders: {student_name}, {class}, {amount}",
                     style = MaterialTheme.typography.labelSmall,
@@ -2156,7 +2168,9 @@ private fun TemplateEditorDialog(
                     label = { Text("Template Name") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    enabled = template?.isDefault != true
+                    enabled = template?.isDefault != true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { hindiFocus.requestFocus() })
                 )
                 
                 Spacer(Modifier.height(12.dp))
@@ -2167,8 +2181,11 @@ private fun TemplateEditorDialog(
                     label = { Text("Hindi Message") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(150.dp),
-                    maxLines = 10
+                        .height(150.dp)
+                        .focusRequester(hindiFocus),
+                    maxLines = 10,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = KeyboardActions(onNext = { englishFocus.requestFocus() })
                 )
                 
                 Spacer(Modifier.height(12.dp))
@@ -2179,8 +2196,11 @@ private fun TemplateEditorDialog(
                     label = { Text("English Message") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(150.dp),
-                    maxLines = 10
+                        .height(150.dp)
+                        .focusRequester(englishFocus),
+                    maxLines = 10,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { templateFocusManager.clearFocus() })
                 )
             }
         },

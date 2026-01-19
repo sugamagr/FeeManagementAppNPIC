@@ -35,7 +35,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
@@ -70,6 +73,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -93,7 +97,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -103,6 +109,7 @@ import androidx.navigation.NavController
 import com.navoditpublic.fees.data.local.entity.TransportFeeHistoryEntity
 import com.navoditpublic.fees.domain.model.TransportRoute
 import com.navoditpublic.fees.presentation.components.LoadingScreen
+import com.navoditpublic.fees.presentation.theme.Saffron
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -459,6 +466,14 @@ fun TransportRoutesScreen(
         val routeBeingEdited = selectedRoute
         val isEditing = routeBeingEdited != null
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val focusManager = LocalFocusManager.current
+        
+        // Focus requesters for keyboard navigation
+        val routeNameFocus = remember { FocusRequester() }
+        val feeNcTo5Focus = remember { FocusRequester() }
+        val fee6To8Focus = remember { FocusRequester() }
+        val fee9To12Focus = remember { FocusRequester() }
+        val descriptionFocus = remember { FocusRequester() }
         
         ModalBottomSheet(
             onDismissRequest = { 
@@ -509,10 +524,15 @@ fun TransportRoutesScreen(
                 
                 // Form
                 StyledTextField(
-                        value = routeName,
-                        onValueChange = { routeName = it },
+                    value = routeName,
+                    onValueChange = { routeName = it },
                     label = "Route Name",
-                    placeholder = "e.g., Kurgaon"
+                    placeholder = "e.g., Kurgaon",
+                    focusRequester = routeNameFocus,
+                    keyboardOptions = KeyboardOptions(imeAction = if (isEditing) ImeAction.Next else ImeAction.Next),
+                    keyboardActions = KeyboardActions(
+                        onNext = { if (isEditing) descriptionFocus.requestFocus() else feeNcTo5Focus.requestFocus() }
+                    )
                 )
                 
                 Spacer(Modifier.height(12.dp))
@@ -531,26 +551,66 @@ fun TransportRoutesScreen(
                             value = feeNcTo5,
                             onValueChange = { feeNcTo5 = it.filter { c -> c.isDigit() } },
                             label = "NC-5",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            focusRequester = feeNcTo5Focus,
+                            keyboardActions = KeyboardActions(onNext = { fee6To8Focus.requestFocus() })
                         )
                         CompactFeeField(
                             value = fee6To8,
                             onValueChange = { fee6To8 = it.filter { c -> c.isDigit() } },
                             label = "6-8",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            focusRequester = fee6To8Focus,
+                            keyboardActions = KeyboardActions(onNext = { fee9To12Focus.requestFocus() })
                         )
                         CompactFeeField(
                             value = fee9To12,
                             onValueChange = { fee9To12 = it.filter { c -> c.isDigit() } },
                             label = "9-12",
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            focusRequester = fee9To12Focus,
+                            keyboardActions = KeyboardActions(onNext = { descriptionFocus.requestFocus() })
                         )
                     }
                     
                     Spacer(Modifier.height(12.dp))
                 } else {
-                    // Current fees display
+                    // Current fees display (read-only in edit mode)
                     routeBeingEdited?.let { route ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Current Fees",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF666666)
+                            )
+                            TextButton(
+                                onClick = {
+                                    // Close edit sheet and open Change Fee sheet
+                                    showAddEditSheet = false
+                                    selectedRoute = route
+                                    feeNcTo5 = route.feeNcTo5.toInt().toString()
+                                    fee6To8 = route.fee6To8.toInt().toString()
+                                    fee9To12 = route.fee9To12.toInt().toString()
+                                    effectiveDate = System.currentTimeMillis()
+                                    feeNotes = ""
+                                    showChangeFeeSheet = true
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    "Change Fee →",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Saffron
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             color = Color(0xFFF8F9FA),
@@ -570,10 +630,13 @@ fun TransportRoutesScreen(
                 }
                 
                 StyledTextField(
-                        value = description,
-                        onValueChange = { description = it },
+                    value = description,
+                    onValueChange = { description = it },
                     label = "Description",
-                    placeholder = "Optional notes"
+                    placeholder = "Optional notes",
+                    focusRequester = descriptionFocus,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                 )
                 
                 Spacer(Modifier.height(20.dp))
@@ -625,6 +688,7 @@ fun TransportRoutesScreen(
     if (showChangeFeeSheet) {
         selectedRoute?.let { route ->
             val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            val changeFocusManager = LocalFocusManager.current
             val calendar = Calendar.getInstance()
             val datePickerDialog = DatePickerDialog(
                 context,
@@ -636,6 +700,12 @@ fun TransportRoutesScreen(
                 calendar.get(Calendar.MONTH),
                 calendar.get(Calendar.DAY_OF_MONTH)
             )
+            
+            // Focus requesters for Change Fee Sheet
+            val changeFeeNcTo5Focus = remember { FocusRequester() }
+            val changeFee6To8Focus = remember { FocusRequester() }
+            val changeFee9To12Focus = remember { FocusRequester() }
+            val changeNotesFocus = remember { FocusRequester() }
             
             ModalBottomSheet(
                 onDismissRequest = { showChangeFeeSheet = false },
@@ -718,19 +788,25 @@ fun TransportRoutesScreen(
                         value = feeNcTo5,
                         onValueChange = { feeNcTo5 = it.filter { c -> c.isDigit() } },
                         label = "NC-5",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        focusRequester = changeFeeNcTo5Focus,
+                        keyboardActions = KeyboardActions(onNext = { changeFee6To8Focus.requestFocus() })
                     )
                     CompactFeeField(
                         value = fee6To8,
                         onValueChange = { fee6To8 = it.filter { c -> c.isDigit() } },
                         label = "6-8",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        focusRequester = changeFee6To8Focus,
+                        keyboardActions = KeyboardActions(onNext = { changeFee9To12Focus.requestFocus() })
                     )
                     CompactFeeField(
                         value = fee9To12,
                         onValueChange = { fee9To12 = it.filter { c -> c.isDigit() } },
                         label = "9-12",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        focusRequester = changeFee9To12Focus,
+                        keyboardActions = KeyboardActions(onNext = { changeNotesFocus.requestFocus() })
                     )
                 }
                 
@@ -764,10 +840,13 @@ fun TransportRoutesScreen(
                 Spacer(Modifier.height(12.dp))
                 
                 StyledTextField(
-                        value = feeNotes,
-                        onValueChange = { feeNotes = it },
+                    value = feeNotes,
+                    onValueChange = { feeNotes = it },
                     label = "Notes",
-                    placeholder = "e.g., Session 2025-26"
+                    placeholder = "e.g., Session 2025-26",
+                    focusRequester = changeNotesFocus,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { changeFocusManager.clearFocus() })
                 )
                 
                 Spacer(Modifier.height(20.dp))
@@ -909,11 +988,14 @@ GradientButton(
                     
                     Spacer(Modifier.height(12.dp))
                     
+                    val closeReasonFocusManager = LocalFocusManager.current
                     StyledTextField(
-                            value = closeReason,
-                            onValueChange = { closeReason = it },
+                        value = closeReason,
+                        onValueChange = { closeReason = it },
                         label = "Reason",
-                        placeholder = "Optional"
+                        placeholder = "Optional",
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { closeReasonFocusManager.clearFocus() })
                     )
                     
                     Spacer(Modifier.height(20.dp))
@@ -1672,7 +1754,10 @@ private fun StyledTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    placeholder: String
+    placeholder: String,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    focusRequester: FocusRequester? = null
 ) {
     OutlinedTextField(
         value = value,
@@ -1685,7 +1770,11 @@ private fun StyledTextField(
             focusedBorderColor = GradientOrange,
             unfocusedBorderColor = Color(0xFFE5E7EB)
         ),
-        modifier = Modifier.fillMaxWidth()
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
     )
 }
 
@@ -1694,7 +1783,10 @@ private fun CompactFeeField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    focusRequester: FocusRequester? = null
 ) {
     OutlinedTextField(
         value = value,
@@ -1703,12 +1795,13 @@ private fun CompactFeeField(
         prefix = { Text("₹", fontSize = 12.sp) },
         singleLine = true,
         shape = RoundedCornerShape(8.dp),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = GradientOrange,
             unfocusedBorderColor = Color(0xFFE5E7EB)
         ),
-        modifier = modifier
+        modifier = modifier.then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
     )
 }
 

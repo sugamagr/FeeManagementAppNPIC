@@ -24,6 +24,7 @@ object PdfGenerator {
     private const val PAGE_HEIGHT = 842 // A4 height in points
     private const val MARGIN = 40f
     private const val HEADER_HEIGHT = 120f
+    private const val CELL_PADDING = 4f
     
     // Colors
     private val SAFFRON_COLOR = Color.rgb(255, 136, 62) // Saffron/Bhagwa
@@ -32,6 +33,143 @@ object PdfGenerator {
     private val TABLE_ROW_ALT = Color.rgb(255, 250, 245)
     private val TEXT_PRIMARY = Color.rgb(33, 33, 33)
     private val TEXT_SECONDARY = Color.rgb(100, 100, 100)
+    
+    /**
+     * Truncate text to fit within maxWidth, adding ellipsis if needed
+     */
+    private fun truncateTextToFit(text: String, paint: Paint, maxWidth: Float): String {
+        if (text.isEmpty()) return text
+        
+        val textWidth = paint.measureText(text)
+        if (textWidth <= maxWidth) return text
+        
+        // Binary search for the right length
+        val ellipsis = "…"
+        val ellipsisWidth = paint.measureText(ellipsis)
+        val availableWidth = maxWidth - ellipsisWidth
+        
+        if (availableWidth <= 0) return ellipsis
+        
+        var low = 0
+        var high = text.length
+        var result = ""
+        
+        while (low <= high) {
+            val mid = (low + high) / 2
+            val truncated = text.substring(0, mid)
+            val width = paint.measureText(truncated)
+            
+            if (width <= availableWidth) {
+                result = truncated
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        
+        return if (result.isEmpty()) ellipsis else "$result$ellipsis"
+    }
+    
+    /**
+     * Split text into multiple lines that fit within maxWidth
+     * Used for name columns that need to show full text
+     */
+    private fun wrapText(text: String, paint: Paint, maxWidth: Float): List<String> {
+        if (text.isEmpty()) return listOf("")
+        
+        val textWidth = paint.measureText(text)
+        if (textWidth <= maxWidth) return listOf(text)
+        
+        val lines = mutableListOf<String>()
+        val words = text.split(" ")
+        var currentLine = StringBuilder()
+        
+        for (word in words) {
+            val testLine = if (currentLine.isEmpty()) word else "${currentLine} $word"
+            val testWidth = paint.measureText(testLine)
+            
+            if (testWidth <= maxWidth) {
+                currentLine = StringBuilder(testLine)
+            } else {
+                // Current line is full
+                if (currentLine.isNotEmpty()) {
+                    lines.add(currentLine.toString())
+                    currentLine = StringBuilder(word)
+                } else {
+                    // Single word is too long, need to break it
+                    var remaining = word
+                    while (remaining.isNotEmpty()) {
+                        var endIndex = remaining.length
+                        while (endIndex > 0 && paint.measureText(remaining.substring(0, endIndex)) > maxWidth) {
+                            endIndex--
+                        }
+                        if (endIndex == 0) endIndex = 1 // At least one character
+                        lines.add(remaining.substring(0, endIndex))
+                        remaining = remaining.substring(endIndex)
+                    }
+                }
+            }
+        }
+        
+        if (currentLine.isNotEmpty()) {
+            lines.add(currentLine.toString())
+        }
+        
+        return if (lines.isEmpty()) listOf(text) else lines
+    }
+    
+    /**
+     * Check if a column should use text wrapping (for names, addresses)
+     */
+    private fun shouldWrapText(headerName: String): Boolean {
+        val lower = headerName.lowercase()
+        return lower.contains("name") || 
+               lower.contains("father") || 
+               lower.contains("address") ||
+               lower.contains("village") ||
+               lower.contains("particulars") ||
+               lower.contains("description")
+    }
+    
+    /**
+     * Calculate smart column widths based on content type
+     * Wider columns for text-heavy fields, narrower for numbers
+     */
+    private fun calculateColumnWidths(headers: List<String>, contentWidth: Float): List<Float> {
+        // Define weight multipliers based on header keywords
+        val weights = headers.map { header ->
+            val headerLower = header.lowercase()
+            when {
+                // Narrow columns for numeric/short data
+                headerLower.contains("sr") || headerLower.contains("s.no") -> 0.6f
+                headerLower.contains("class") || headerLower.contains("section") -> 0.7f
+                headerLower.contains("phone") || headerLower.contains("mobile") -> 0.9f
+                headerLower.contains("amount") || headerLower.contains("fee") || 
+                headerLower.contains("paid") || headerLower.contains("dues") ||
+                headerLower.contains("total") || headerLower.contains("balance") -> 0.8f
+                headerLower.contains("date") -> 0.8f
+                headerLower.contains("status") -> 0.6f
+                headerLower.contains("mode") -> 0.7f
+                headerLower.contains("receipt") || headerLower.contains("a/c") || 
+                headerLower.contains("account") -> 0.8f
+                // Wider columns for text-heavy data
+                headerLower.contains("name") -> 1.3f
+                headerLower.contains("father") -> 1.2f
+                headerLower.contains("address") || headerLower.contains("village") -> 1.1f
+                headerLower.contains("route") -> 1.0f
+                headerLower.contains("description") || headerLower.contains("particulars") -> 1.4f
+                else -> 1.0f
+            }
+        }
+        
+        // Calculate total weight
+        val totalWeight = weights.sum()
+        
+        // Distribute width based on weights
+        return weights.map { weight ->
+            (contentWidth * weight / totalWeight)
+        }
+    }
     
     /**
      * Generate a PDF report with school header and table
@@ -50,8 +188,6 @@ object PdfGenerator {
         var canvas = page.canvas
         var currentY = MARGIN
         var pageNumber = 1
-        var rowsOnCurrentPage = 0
-        val maxRowsPerPage = 25
         
         // Draw header on first page
         currentY = drawHeader(canvas, context, title)
@@ -61,19 +197,44 @@ object PdfGenerator {
             currentY = drawSummary(canvas, summary, currentY)
         }
         
+        // Calculate smart column widths based on header content
+        val contentWidth = PAGE_WIDTH - (2 * MARGIN)
+        val columnWidths = calculateColumnWidths(headers, contentWidth)
+        
         // Draw table headers
         val tableStartY = currentY + 20f
-        currentY = drawTableHeader(canvas, headers, tableStartY)
-        
-        // Calculate column widths
-        val contentWidth = PAGE_WIDTH - (2 * MARGIN)
-        val columnWidth = contentWidth / headers.size
+        currentY = drawTableHeader(canvas, headers, tableStartY, columnWidths)
         
         // Draw table rows
-        val rowHeight = 28f
+        val baseRowHeight = 28f
+        val lineHeight = 12f // Height per line of text
         var isAlternate = false
         
+        // Text paint for measuring and drawing
+        val textPaint = Paint().apply {
+            color = TEXT_PRIMARY
+            textSize = 10f
+            isAntiAlias = true
+        }
+        
         for (row in rows) {
+            // Pre-calculate wrapped text for each cell and determine row height
+            val wrappedCells = row.mapIndexed { index, cellValue ->
+                val colWidth = columnWidths.getOrElse(index) { columnWidths.lastOrNull() ?: 50f }
+                val availableWidth = colWidth - (2 * CELL_PADDING)
+                val headerName = headers.getOrElse(index) { "" }
+                
+                if (shouldWrapText(headerName)) {
+                    wrapText(cellValue, textPaint, availableWidth)
+                } else {
+                    listOf(truncateTextToFit(cellValue, textPaint, availableWidth))
+                }
+            }
+            
+            // Calculate dynamic row height based on max lines in any cell
+            val maxLines = wrappedCells.maxOfOrNull { it.size } ?: 1
+            val rowHeight = maxOf(baseRowHeight, (maxLines * lineHeight) + 16f)
+            
             // Check if we need a new page
             if (currentY + rowHeight > PAGE_HEIGHT - MARGIN - 50) {
                 // Add page number
@@ -90,7 +251,7 @@ object PdfGenerator {
                 currentY = drawSmallHeader(canvas, title, pageNumber)
                 
                 // Redraw table headers
-                currentY = drawTableHeader(canvas, headers, currentY)
+                currentY = drawTableHeader(canvas, headers, currentY, columnWidths)
                 isAlternate = false
             }
             
@@ -103,21 +264,30 @@ object PdfGenerator {
                 canvas.drawRect(MARGIN, currentY, PAGE_WIDTH - MARGIN, currentY + rowHeight, bgPaint)
             }
             
-            // Draw row data
-            val textPaint = Paint().apply {
-                color = TEXT_PRIMARY
-                textSize = 10f
-                isAntiAlias = true
-            }
-            
-            row.forEachIndexed { index, cellValue ->
-                val x = MARGIN + (index * columnWidth) + 8
-                canvas.drawText(
-                    cellValue.take(25), // Truncate if too long
-                    x,
-                    currentY + 18f,
-                    textPaint
-                )
+            // Draw row data with text wrapping for name columns
+            var xOffset = MARGIN
+            wrappedCells.forEachIndexed { index, lines ->
+                val colWidth = columnWidths.getOrElse(index) { columnWidths.lastOrNull() ?: 50f }
+                
+                // Save canvas state and clip to column bounds
+                canvas.save()
+                canvas.clipRect(xOffset, currentY, xOffset + colWidth, currentY + rowHeight)
+                
+                // Draw each line of text
+                lines.forEachIndexed { lineIndex, lineText ->
+                    val textY = currentY + 14f + (lineIndex * lineHeight)
+                    canvas.drawText(
+                        lineText,
+                        xOffset + CELL_PADDING,
+                        textY,
+                        textPaint
+                    )
+                }
+                
+                // Restore canvas state
+                canvas.restore()
+                
+                xOffset += colWidth
             }
             
             // Draw row border
@@ -130,7 +300,6 @@ object PdfGenerator {
             
             currentY += rowHeight
             isAlternate = !isAlternate
-            rowsOnCurrentPage++
         }
         
         // Draw final page number
@@ -289,10 +458,8 @@ object PdfGenerator {
         return y + 10f
     }
     
-    private fun drawTableHeader(canvas: Canvas, headers: List<String>, startY: Float): Float {
+    private fun drawTableHeader(canvas: Canvas, headers: List<String>, startY: Float, columnWidths: List<Float>): Float {
         val headerHeight = 30f
-        val contentWidth = PAGE_WIDTH - (2 * MARGIN)
-        val columnWidth = contentWidth / headers.size
         
         // Header background
         val bgPaint = Paint().apply {
@@ -309,9 +476,30 @@ object PdfGenerator {
             isAntiAlias = true
         }
         
+        var xOffset = MARGIN
         headers.forEachIndexed { index, header ->
-            val x = MARGIN + (index * columnWidth) + 8
-            canvas.drawText(header, x, startY + 20f, textPaint)
+            val colWidth = columnWidths.getOrElse(index) { columnWidths.lastOrNull() ?: 50f }
+            val availableWidth = colWidth - (2 * CELL_PADDING)
+            
+            // Truncate header if needed
+            val displayHeader = truncateTextToFit(header, textPaint, availableWidth)
+            
+            // Clip and draw
+            canvas.save()
+            canvas.clipRect(xOffset, startY, xOffset + colWidth, startY + headerHeight)
+            canvas.drawText(displayHeader, xOffset + CELL_PADDING, startY + 20f, textPaint)
+            canvas.restore()
+            
+            // Draw column separator
+            if (index < headers.size - 1) {
+                val separatorPaint = Paint().apply {
+                    color = Color.argb(50, 255, 255, 255)
+                    strokeWidth = 0.5f
+                }
+                canvas.drawLine(xOffset + colWidth, startY + 4f, xOffset + colWidth, startY + headerHeight - 4f, separatorPaint)
+            }
+            
+            xOffset += colWidth
         }
         
         return startY + headerHeight

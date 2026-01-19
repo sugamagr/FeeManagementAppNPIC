@@ -926,6 +926,9 @@ class AddEditStudentViewModel @Inject constructor(
                         // Update transport enrollments
                         saveTransportEnrollments(editStudentId)
                         
+                        // Track if any follow-up operation fails
+                        var hasError = false
+                        
                         // Sync opening balance ledger entry with student entity
                         // This handles create/update/delete based on the new amount
                         if (currentSession != null) {
@@ -935,20 +938,26 @@ class AddEditStudentViewModel @Inject constructor(
                                 newAmount = openingBalanceAmount,
                                 date = currentSession.startDate ?: System.currentTimeMillis(),
                                 remarks = _state.value.openingBalanceRemarks.trim()
-                            )
+                            ).onFailure { e ->
+                                hasError = true
+                                _events.emit(AddEditStudentEvent.Error("Failed to sync opening balance: ${e.message}"))
+                            }
                         }
                         
-                        // Log the update
-                        auditRepository.logUpdate(
-                            entityType = AuditLog.ENTITY_STUDENT,
-                            entityId = student.id,
-                            entityName = student.name,
-                            fieldName = "student_details",
-                            oldValue = originalStudent?.name,
-                            newValue = student.name
-                        )
-                        clearDraftAfterSave()
-                        _events.emit(AddEditStudentEvent.Success)
+                        // Only emit success if all operations succeeded
+                        if (!hasError) {
+                            // Log the update
+                            auditRepository.logUpdate(
+                                entityType = AuditLog.ENTITY_STUDENT,
+                                entityId = student.id,
+                                entityName = student.name,
+                                fieldName = "student_details",
+                                oldValue = originalStudent?.name,
+                                newValue = student.name
+                            )
+                            clearDraftAfterSave()
+                            _events.emit(AddEditStudentEvent.Success)
+                        }
                     }.onFailure { e ->
                         _events.emit(AddEditStudentEvent.Error(e.message ?: "Failed to update student"))
                     }
@@ -956,6 +965,9 @@ class AddEditStudentViewModel @Inject constructor(
                     studentRepository.insert(student).onSuccess { newId ->
                         // Save transport enrollments
                         saveTransportEnrollments(newId)
+                        
+                        // Track if any follow-up operation fails
+                        var hasError = false
                         
                         // Create opening balance DEBIT entry if any (previous year dues)
                         if (openingBalanceAmount > 0 && currentSession != null) {
@@ -965,7 +977,10 @@ class AddEditStudentViewModel @Inject constructor(
                                 amount = openingBalanceAmount,
                                 date = currentSession.startDate ?: System.currentTimeMillis(),
                                 remarks = _state.value.openingBalanceRemarks.trim()
-                            )
+                            ).onFailure { e ->
+                                hasError = true
+                                _events.emit(AddEditStudentEvent.Error("Failed to create opening balance: ${e.message}"))
+                            }
                         }
                         
                         // Add session fees for the student (tuition + transport) as DEBIT entries
@@ -991,14 +1006,17 @@ class AddEditStudentViewModel @Inject constructor(
                             )
                         }
                         
-                        // Log the creation
-                        auditRepository.logCreate(
-                            entityType = AuditLog.ENTITY_STUDENT,
-                            entityId = newId,
-                            entityName = student.name
-                        )
-                        clearDraftAfterSave()
-                        _events.emit(AddEditStudentEvent.Success)
+                        // Only emit success if all operations succeeded
+                        if (!hasError) {
+                            // Log the creation
+                            auditRepository.logCreate(
+                                entityType = AuditLog.ENTITY_STUDENT,
+                                entityId = newId,
+                                entityName = student.name
+                            )
+                            clearDraftAfterSave()
+                            _events.emit(AddEditStudentEvent.Success)
+                        }
                     }.onFailure { e ->
                         val errorMsg = when {
                             e.message?.contains("UNIQUE constraint failed") == true &&

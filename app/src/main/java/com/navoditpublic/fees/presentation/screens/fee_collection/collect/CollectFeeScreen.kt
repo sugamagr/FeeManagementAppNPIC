@@ -48,6 +48,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -118,8 +119,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -608,6 +614,7 @@ private fun ReceiptInfoCard(
                 )
             }
             
+            val receiptFocusManager = LocalFocusManager.current
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.Top
@@ -625,7 +632,13 @@ private fun ReceiptInfoCard(
                     textStyle = MaterialTheme.typography.bodyLarge.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Number,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = { receiptFocusManager.clearFocus() }
+                                    ),
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = Saffron,
                         cursorColor = Saffron
@@ -2294,6 +2307,8 @@ private fun AmountEntryCard(
             }
             
             // Amount Input Field
+            val amountFocusManager = LocalFocusManager.current
+            val remarksFocusRequester = remember { FocusRequester() }
                                 OutlinedTextField(
                 value = amountReceived,
                 onValueChange = onAmountChange,
@@ -2318,7 +2333,13 @@ private fun AmountEntryCard(
                 textStyle = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold
                 ),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { remarksFocusRequester.requestFocus() }
+                ),
                                     colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Saffron,
                     cursorColor = Saffron,
@@ -2340,10 +2361,16 @@ private fun AmountEntryCard(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(remarksFocusRequester),
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 isError = remarks.isBlank() && amountReceived.isNotBlank(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = { amountFocusManager.clearFocus() }
+                ),
                 supportingText = {
                     Text(
                         "Describe the payment (months, fee type)",

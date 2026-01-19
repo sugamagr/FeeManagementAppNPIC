@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -212,6 +214,7 @@ fun DailyCollectionScreen(
         containerColor = Cream,
         contentWindowInsets = WindowInsets(0)
     ) { paddingValues ->
+        val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         if (state.isLoading) {
             LoadingScreen()
         } else {
@@ -219,7 +222,7 @@ fun DailyCollectionScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
-                contentPadding = PaddingValues(bottom = 24.dp)
+                contentPadding = PaddingValues(bottom = 24.dp + navigationBarPadding)
             ) {
                 // Premium Header
                 item {

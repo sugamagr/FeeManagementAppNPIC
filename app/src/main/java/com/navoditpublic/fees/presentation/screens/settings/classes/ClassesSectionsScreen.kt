@@ -55,8 +55,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -1007,6 +1011,7 @@ private fun EnhancedAddSectionDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 // Custom Section Input
+                val addSectionFocusManager = LocalFocusManager.current
                 OutlinedTextField(
                     value = newSectionName,
                     onValueChange = { newSectionName = it.uppercase().filter { c -> c.isLetter() }.take(1) },
@@ -1018,6 +1023,15 @@ private fun EnhancedAddSectionDialog(
                         focusedBorderColor = colors.primary,
                         focusedLabelColor = colors.primary,
                         cursorColor = colors.primary
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (newSectionName.isNotBlank() && newSectionName !in existingSections) {
+                                onAddSingle(newSectionName)
+                            }
+                            addSectionFocusManager.clearFocus()
+                        }
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )

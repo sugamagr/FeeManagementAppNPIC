@@ -114,14 +114,22 @@ interface LedgerDao {
     """)
     suspend fun reverseEntriesForReceipt(receiptId: Long)
     
+    /**
+     * Get total pending dues across all students.
+     * Only counts students with positive balances (excludes overpayments).
+     * This uses a subquery to calculate each student's balance first,
+     * then sums only the positive balances to match defaulters calculation.
+     */
     @Query("""
-        SELECT SUM(
-            CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END
-        ) - SUM(
-            CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END
-        ) 
-        FROM ledger_entries 
-        WHERE is_reversed = 0
+        SELECT SUM(student_balance) FROM (
+            SELECT student_id,
+                   SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
+                   SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END) as student_balance
+            FROM ledger_entries
+            WHERE is_reversed = 0
+            GROUP BY student_id
+            HAVING student_balance > 0
+        )
     """)
     fun getTotalPendingDues(): Flow<Double?>
     

@@ -46,7 +46,11 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -163,6 +167,7 @@ fun ReceiptDetailScreen(
                 ) 
             },
             text = {
+                val cancelFocusManager = LocalFocusManager.current
                 Column {
                     Text(
                         text = "This will cancel receipt #${state.receipt?.receiptNumber} and reverse the payment in the student's ledger.",
@@ -177,7 +182,11 @@ fun ReceiptDetailScreen(
                         label = { Text("Reason for cancellation") },
                         placeholder = { Text("e.g., Duplicate receipt") },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = { cancelFocusManager.clearFocus() }
+                        )
                     )
                 }
             },

@@ -343,10 +343,11 @@ class CustomReportViewModel @Inject constructor(
             }
             
             // Calculate summary stats
+            // Only count positive dues (exclude overpayments/advances)
             val filteredFinancials = students.mapNotNull { financials[it.id] }
             val totalSessionFees = filteredFinancials.sumOf { it.sessionFees }
             val totalCollected = filteredFinancials.sumOf { it.totalPaid }
-            val totalDues = filteredFinancials.sumOf { it.dues }
+            val totalDues = filteredFinancials.sumOf { it.dues.coerceAtLeast(0.0) }
             val overallRate = if (totalSessionFees > 0) ((totalCollected / totalSessionFees) * 100).toFloat() else 0f
             
             _state.value = _state.value.copy(

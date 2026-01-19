@@ -81,12 +81,12 @@ class LedgerMainViewModel @Inject constructor(
                         val totalDue = feeRepository.getCurrentBalance(student.id)
                         val paid = feeRepository.getTotalCredits(student.id)
                         
-                        classDues += totalDue
-                        classPaid += paid
-                        
+                        // Only count positive dues (exclude overpayments/advances)
                         if (totalDue > 0) {
+                            classDues += totalDue
                             classStudentsWithDues++
                         }
+                        classPaid += paid
                     }
                     
                     summaries.add(

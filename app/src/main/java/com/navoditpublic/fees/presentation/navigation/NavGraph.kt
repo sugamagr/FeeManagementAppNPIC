@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -530,6 +531,7 @@ private fun ModernBottomNavBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding() // Add padding for 3-button navigation
                 .height(72.dp)
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,

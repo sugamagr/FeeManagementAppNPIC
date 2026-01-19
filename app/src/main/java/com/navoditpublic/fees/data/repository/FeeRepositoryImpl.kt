@@ -560,7 +560,7 @@ class FeeRepositoryImpl @Inject constructor(
             
             // Case 2: No entry exists but new amount > 0 -> create entry
             existingEntry == null && newAmount > 0 -> {
-                createOpeningBalanceEntry(studentId, sessionId, newAmount, date, remarks)
+                createOpeningBalanceEntry(studentId, sessionId, newAmount, date, remarks).getOrThrow()
             }
             
             // Case 3: Entry exists but new amount is 0 -> delete entry
@@ -588,13 +588,15 @@ class FeeRepositoryImpl @Inject constructor(
         addTuition: Boolean,
         addTransport: Boolean
     ): Result<Double> = runCatching {
-        // Check for duplicate fee entries - prevent adding fees twice
-        if (hasSessionFeeEntries(studentId, sessionId)) {
-            return@runCatching 0.0 // Already has fee entries, skip
-        }
-        
         // Use transaction to ensure all fee entries are added atomically
+        // The duplicate check MUST be inside the transaction to prevent race conditions
         database.withTransaction {
+            // Check for duplicate fee entries - prevent adding fees twice
+            // This check is inside the transaction to ensure atomicity
+            if (hasSessionFeeEntries(studentId, sessionId)) {
+                return@withTransaction 0.0 // Already has fee entries, skip
+            }
+            
             val student = studentDao.getById(studentId) ?: throw IllegalArgumentException("Student not found")
             val session = academicSessionDao.getById(sessionId) ?: throw IllegalArgumentException("Session not found")
             val className = student.currentClass

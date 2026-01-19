@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Payment
@@ -38,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -130,6 +134,7 @@ fun FeeStructureScreen(
                 item { SectionHeader(title = "Admission Fee (All Classes)") }
                 
                 item {
+                    val admissionFocusManager = LocalFocusManager.current
                     OutlinedTextField(
                         value = state.admissionFee,
                         onValueChange = viewModel::updateAdmissionFee,
@@ -138,7 +143,13 @@ fun FeeStructureScreen(
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Number,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { admissionFocusManager.moveFocus(FocusDirection.Down) }
+                        )
                     )
                 }
                 
@@ -154,11 +165,14 @@ fun FeeStructureScreen(
                 }
                 
                 items(state.monthlyFees.entries.toList()) { (className, amount) ->
+                    val entries = state.monthlyFees.entries.toList()
+                    val isLast = entries.lastOrNull()?.key == className
                     FeeInputRow(
                         className = className,
                         amount = amount,
                         onAmountChange = { viewModel.updateMonthlyFee(className, it) },
-                        suffix = "/month"
+                        suffix = "/month",
+                        isLast = isLast && state.annualFees.isEmpty()
                     )
                 }
                 
@@ -174,11 +188,14 @@ fun FeeStructureScreen(
                 }
                 
                 items(state.annualFees.entries.toList()) { (className, amount) ->
+                    val entries = state.annualFees.entries.toList()
+                    val isLast = entries.lastOrNull()?.key == className
                     FeeInputRow(
                         className = className,
                         amount = amount,
                         onAmountChange = { viewModel.updateAnnualFee(className, it) },
-                        suffix = "/year"
+                        suffix = "/year",
+                        isLast = isLast && state.registrationFees.isEmpty()
                     )
                 }
                 
@@ -194,11 +211,14 @@ fun FeeStructureScreen(
                 }
                 
                 items(state.registrationFees.entries.toList()) { (className, amount) ->
+                    val entries = state.registrationFees.entries.toList()
+                    val isLast = entries.lastOrNull()?.key == className
                     FeeInputRow(
                         className = className,
                         amount = amount,
                         onAmountChange = { viewModel.updateRegistrationFee(className, it) },
-                        suffix = ""
+                        suffix = "",
+                        isLast = isLast
                     )
                 }
                 
@@ -228,8 +248,10 @@ private fun FeeInputRow(
     className: String,
     amount: String,
     onAmountChange: (String) -> Unit,
-    suffix: String = ""
+    suffix: String = "",
+    isLast: Boolean = false
 ) {
+    val focusManager = LocalFocusManager.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -249,7 +271,14 @@ private fun FeeInputRow(
             modifier = Modifier.weight(1f),
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = if (isLast) ImeAction.Done else ImeAction.Next
+            ),
+            keyboardActions = KeyboardActions(
+                onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                onDone = { focusManager.clearFocus() }
+            )
         )
     }
 }

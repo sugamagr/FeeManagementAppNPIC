@@ -360,7 +360,8 @@ private fun DuesTabContent(
         ) {
             DuesHeroCard(
                 totalDues = state.totalPendingDues,
-                totalStudents = state.totalStudents
+                totalStudents = state.totalStudents,
+                totalClasses = state.totalClasses
             )
         }
         
@@ -537,7 +538,8 @@ private fun CollectionTabContent(
 @Composable
 private fun DuesHeroCard(
     totalDues: Double,
-    totalStudents: Int
+    totalStudents: Int,
+    totalClasses: Int
 ) {
     Card(
         modifier = Modifier
@@ -616,7 +618,7 @@ private fun DuesHeroCard(
                 )
                 StatChip(
                     icon = Icons.Default.Group,
-                    value = "12",
+                    value = totalClasses.toString(),
                     label = "Classes",
                     color = AccentPurple,
                     modifier = Modifier.weight(1f)

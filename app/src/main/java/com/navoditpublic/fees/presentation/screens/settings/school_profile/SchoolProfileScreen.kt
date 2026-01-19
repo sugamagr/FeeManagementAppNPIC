@@ -23,7 +23,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Apartment
@@ -72,6 +76,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -115,6 +120,18 @@ fun SchoolProfileScreen(
             }
         }
     }
+    
+    val focusManager = LocalFocusManager.current
+    
+    // Focus requesters for keyboard navigation
+    val schoolNameFocus = remember { FocusRequester() }
+    val taglineFocus = remember { FocusRequester() }
+    val addressLine1Focus = remember { FocusRequester() }
+    val addressLine2Focus = remember { FocusRequester() }
+    val districtFocus = remember { FocusRequester() }
+    val pincodeFocus = remember { FocusRequester() }
+    val phoneFocus = remember { FocusRequester() }
+    val emailFocus = remember { FocusRequester() }
     
     Scaffold(
         topBar = {
@@ -165,7 +182,9 @@ fun SchoolProfileScreen(
                                 onValueChange = viewModel::updateSchoolName,
                                 label = "School Name",
                                 icon = Icons.Outlined.School,
-                                isRequired = true
+                                isRequired = true,
+                                focusRequester = schoolNameFocus,
+                                keyboardActions = KeyboardActions(onNext = { taglineFocus.requestFocus() })
                             )
                             
                             Spacer(modifier = Modifier.height(12.dp))
@@ -175,7 +194,9 @@ fun SchoolProfileScreen(
                                 onValueChange = viewModel::updateTagline,
                                 label = "Tagline / Motto",
                                 icon = Icons.Outlined.FormatQuote,
-                                placeholder = "e.g., Nurturing Excellence"
+                                placeholder = "e.g., Nurturing Excellence",
+                                focusRequester = taglineFocus,
+                                keyboardActions = KeyboardActions(onNext = { addressLine1Focus.requestFocus() })
                             )
                         }
                     }
@@ -194,7 +215,9 @@ fun SchoolProfileScreen(
                                 onValueChange = viewModel::updateAddressLine1,
                                 label = "Address Line 1",
                                 icon = Icons.Outlined.LocationOn,
-                                isRequired = true
+                                isRequired = true,
+                                focusRequester = addressLine1Focus,
+                                keyboardActions = KeyboardActions(onNext = { addressLine2Focus.requestFocus() })
                             )
                             
                             Spacer(modifier = Modifier.height(12.dp))
@@ -203,7 +226,9 @@ fun SchoolProfileScreen(
                                 value = state.addressLine2,
                                 onValueChange = viewModel::updateAddressLine2,
                                 label = "Village / Area",
-                                icon = Icons.Outlined.Home
+                                icon = Icons.Outlined.Home,
+                                focusRequester = addressLine2Focus,
+                                keyboardActions = KeyboardActions(onNext = { districtFocus.requestFocus() })
                             )
                             
                             Spacer(modifier = Modifier.height(12.dp))
@@ -217,7 +242,9 @@ fun SchoolProfileScreen(
                                     onValueChange = viewModel::updateDistrict,
                                     label = "District",
                                     icon = Icons.Outlined.LocationCity,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    focusRequester = districtFocus,
+                                    keyboardActions = KeyboardActions(onNext = { pincodeFocus.requestFocus() })
                                 )
                                 IconTextField(
                                     value = state.pincode,
@@ -225,7 +252,9 @@ fun SchoolProfileScreen(
                                     label = "Pincode",
                                     icon = Icons.Outlined.Pin,
                                     keyboardType = KeyboardType.Number,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    focusRequester = pincodeFocus,
+                                    keyboardActions = KeyboardActions(onNext = { phoneFocus.requestFocus() })
                                 )
                             }
                         }
@@ -250,7 +279,9 @@ fun SchoolProfileScreen(
                                     label = "Phone",
                                     icon = Icons.Outlined.Phone,
                                     keyboardType = KeyboardType.Phone,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    focusRequester = phoneFocus,
+                                    keyboardActions = KeyboardActions(onNext = { emailFocus.requestFocus() })
                                 )
                                 IconTextField(
                                     value = state.email,
@@ -258,7 +289,10 @@ fun SchoolProfileScreen(
                                     label = "Email",
                                     icon = Icons.Outlined.Email,
                                     keyboardType = KeyboardType.Email,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    focusRequester = emailFocus,
+                                    imeAction = ImeAction.Done,
+                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                                 )
                             }
                         }
@@ -529,7 +563,10 @@ private fun IconTextField(
     modifier: Modifier = Modifier,
     isRequired: Boolean = false,
     placeholder: String? = null,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    imeAction: ImeAction = ImeAction.Next,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    focusRequester: FocusRequester? = null
 ) {
     OutlinedTextField(
         value = value,
@@ -552,14 +589,17 @@ private fun IconTextField(
                 modifier = Modifier.size(20.dp)
             )
         },
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
         singleLine = true,
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
         ),
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+        keyboardActions = keyboardActions
     )
 }
 

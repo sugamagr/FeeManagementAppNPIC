@@ -29,7 +29,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -65,6 +69,7 @@ fun SavedViewsScreen(
     
     // Edit Dialog
     if (state.showEditDialog && state.editingView != null) {
+        val editFocusManager = LocalFocusManager.current
         AlertDialog(
             onDismissRequest = viewModel::dismissEditDialog,
             title = { Text("Rename View") },
@@ -75,7 +80,16 @@ fun SavedViewsScreen(
                     label = { Text("View Name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (state.editViewName.isNotBlank()) {
+                                viewModel.saveEditedView()
+                            }
+                            editFocusManager.clearFocus()
+                        }
+                    )
                 )
             },
             confirmButton = {

@@ -59,8 +59,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -1013,6 +1017,7 @@ private fun AddSessionDialog(
         },
         text = {
             Column {
+                val addSessionFocusManager = LocalFocusManager.current
                 OutlinedTextField(
                     value = sessionName,
                     onValueChange = onSessionNameChange,
@@ -1020,6 +1025,15 @@ private fun AddSessionDialog(
                     placeholder = { Text("e.g., 2025-26") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (sessionName.isNotBlank()) {
+                                onConfirm()
+                            }
+                            addSessionFocusManager.clearFocus()
+                        }
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
                 
@@ -1118,6 +1132,7 @@ private fun DuplicateSessionDialog(
                 
                 Spacer(modifier = Modifier.height(12.dp))
                 
+                val duplicateFocusManager = LocalFocusManager.current
                 OutlinedTextField(
                     value = newSessionName,
                     onValueChange = { newSessionName = it },
@@ -1125,6 +1140,15 @@ private fun DuplicateSessionDialog(
                     placeholder = { Text("e.g., 2026-27") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (newSessionName.isNotBlank() && newSessionName != sourceSession.sessionName) {
+                                onConfirm(newSessionName)
+                            }
+                            duplicateFocusManager.clearFocus()
+                        }
+                    ),
                     modifier = Modifier.fillMaxWidth()
                 )
             }

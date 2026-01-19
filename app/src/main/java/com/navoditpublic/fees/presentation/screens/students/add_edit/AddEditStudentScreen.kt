@@ -1502,10 +1502,11 @@ fun OpeningBalanceSectionCard(
                                 errorMessage = openingBalanceError,
                                 keyboardOptions = KeyboardOptions(
                                     keyboardType = KeyboardType.Number,
-                                    imeAction = ImeAction.Next
+                                    imeAction = if (isMigrationMode) ImeAction.Next else ImeAction.Done
                                 ),
                                 keyboardActions = KeyboardActions(
-                                    onNext = { currentYearPaidFocus?.requestFocus() ?: focusManager?.clearFocus() }
+                                    onNext = { currentYearPaidFocus?.requestFocus() },
+                                    onDone = { focusManager?.clearFocus() }
                                 ),
                                 focusRequester = openingBalanceFocus
                             )
