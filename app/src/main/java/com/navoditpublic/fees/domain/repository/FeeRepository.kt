@@ -150,6 +150,19 @@ interface FeeRepository {
     ): Result<Long>
     
     /**
+     * Sync opening balance entry with student entity.
+     * Creates, updates, or deletes the ledger entry based on the new amount.
+     * This should be called when editing a student's opening balance.
+     */
+    suspend fun syncOpeningBalanceEntry(
+        studentId: Long,
+        sessionId: Long,
+        newAmount: Double,
+        date: Long,
+        remarks: String
+    ): Result<Unit>
+    
+    /**
      * Add session fees (tuition + transport) for a single student as DEBIT entries in ledger
      * Creates entries dated at session start (April 1)
      * 

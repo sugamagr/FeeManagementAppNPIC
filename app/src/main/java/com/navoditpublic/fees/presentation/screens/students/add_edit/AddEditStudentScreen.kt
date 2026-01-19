@@ -34,7 +34,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
@@ -366,6 +371,37 @@ fun AddEditStudentScreen(
             }
         }
     ) { paddingValues ->
+        // Focus management for keyboard navigation
+        val focusManager = LocalFocusManager.current
+        val srNumberFocus = remember { FocusRequester() }
+        val accountNumberFocus = remember { FocusRequester() }
+        val studentNameFocus = remember { FocusRequester() }
+        val fatherNameFocus = remember { FocusRequester() }
+        val motherNameFocus = remember { FocusRequester() }
+        val phonePrimaryFocus = remember { FocusRequester() }
+        val phoneSecondaryFocus = remember { FocusRequester() }
+        val addressLine1Focus = remember { FocusRequester() }
+        val villageFocus = remember { FocusRequester() }
+        val pincodeFocus = remember { FocusRequester() }
+        val districtFocus = remember { FocusRequester() }
+        val stateFocus = remember { FocusRequester() }
+        val openingBalanceFocus = remember { FocusRequester() }
+        val currentYearPaidFocus = remember { FocusRequester() }
+        
+        // Section expansion state for auto-collapse on keyboard navigation
+        var basicInfoExpanded by remember { mutableStateOf(true) }
+        var classInfoExpanded by remember { mutableStateOf(true) }
+        var contactExpanded by remember { mutableStateOf(true) }
+        var addressExpanded by remember { mutableStateOf(true) }
+        
+        // Helper to collapse other sections when navigating to a new one
+        fun collapseOtherSections(keepExpanded: String) {
+            if (keepExpanded != "basicInfo") basicInfoExpanded = false
+            if (keepExpanded != "classInfo") classInfoExpanded = false
+            if (keepExpanded != "contact") contactExpanded = false
+            if (keepExpanded != "address") addressExpanded = false
+        }
+        
         if (state.isLoading && !state.isEditMode && state.srNumber.isEmpty()) {
             LoadingScreen(modifier = Modifier.padding(paddingValues))
         } else {
@@ -395,7 +431,9 @@ fun AddEditStudentScreen(
                         icon = Icons.Default.Person,
                         accentColor = SectionBasicInfo,
                         isComplete = state.srNumber.isNotBlank() && state.accountNumber.isNotBlank() && 
-                                    state.name.isNotBlank() && state.fatherName.isNotBlank()
+                                    state.name.isNotBlank() && state.fatherName.isNotBlank(),
+                        isExpanded = basicInfoExpanded,
+                        onExpandChange = { basicInfoExpanded = it }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
@@ -409,7 +447,14 @@ fun AddEditStudentScreen(
                                     modifier = Modifier.weight(1f),
                                     isError = state.srNumberError != null,
                                     errorMessage = state.srNumberError,
-                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters)
+                                    keyboardOptions = KeyboardOptions(
+                                        capitalization = KeyboardCapitalization.Characters,
+                                        imeAction = ImeAction.Next
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onNext = { accountNumberFocus.requestFocus() }
+                                    ),
+                                    focusRequester = srNumberFocus
                                 )
                                 StyledTextField(
                                     value = state.accountNumber,
@@ -418,7 +463,14 @@ fun AddEditStudentScreen(
                                     modifier = Modifier.weight(1f),
                                     isError = state.accountNumberError != null,
                                     errorMessage = state.accountNumberError,
-                                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters)
+                                    keyboardOptions = KeyboardOptions(
+                                        capitalization = KeyboardCapitalization.Characters,
+                                        imeAction = ImeAction.Next
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onNext = { studentNameFocus.requestFocus() }
+                                    ),
+                                    focusRequester = accountNumberFocus
                                 )
                             }
                             
@@ -429,7 +481,14 @@ fun AddEditStudentScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 isError = state.nameError != null,
                                 errorMessage = state.nameError,
-                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Words,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { fatherNameFocus.requestFocus() }
+                                ),
+                                focusRequester = studentNameFocus
                             )
                             
                             StyledTextField(
@@ -439,7 +498,14 @@ fun AddEditStudentScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 isError = state.fatherNameError != null,
                                 errorMessage = state.fatherNameError,
-                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Words,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { motherNameFocus.requestFocus() }
+                                ),
+                                focusRequester = fatherNameFocus
                             )
                             
                             StyledTextField(
@@ -447,7 +513,18 @@ fun AddEditStudentScreen(
                                 onValueChange = viewModel::updateMotherName,
                                 label = "Mother's Name",
                                 modifier = Modifier.fillMaxWidth(),
-                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Words,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { 
+                                        collapseOtherSections("contact")
+                                        contactExpanded = true
+                                        phonePrimaryFocus.requestFocus() 
+                                    }
+                                ),
+                                focusRequester = motherNameFocus
                             )
                         }
                     }
@@ -460,7 +537,9 @@ fun AddEditStudentScreen(
                         subtitle = "Academic details",
                         icon = Icons.Default.School,
                         accentColor = SectionClassInfo,
-                        isComplete = state.currentClass.isNotBlank()
+                        isComplete = state.currentClass.isNotBlank(),
+                        isExpanded = classInfoExpanded,
+                        onExpandChange = { classInfoExpanded = it }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             // Class selector - Chip-based grid
@@ -603,7 +682,8 @@ fun AddEditStudentScreen(
                             NewAdmissionToggle(
                                 isNewAdmission = state.isNewAdmission,
                                 onToggle = viewModel::updateIsNewAdmission,
-                                isMigrationMode = state.isMigrationMode
+                                isMigrationMode = state.isMigrationMode,
+                                isEditMode = state.isEditMode
                             )
                         }
                     }
@@ -616,7 +696,9 @@ fun AddEditStudentScreen(
                         subtitle = "Phone numbers",
                         icon = Icons.Default.Phone,
                         accentColor = SectionContact,
-                        isComplete = state.phonePrimary.length == 10
+                        isComplete = state.phonePrimary.length == 10,
+                        isExpanded = contactExpanded,
+                        onExpandChange = { contactExpanded = it }
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -629,14 +711,32 @@ fun AddEditStudentScreen(
                                 modifier = Modifier.weight(1f),
                                 isError = state.phonePrimaryError != null,
                                 errorMessage = state.phonePrimaryError,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Phone,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { phoneSecondaryFocus.requestFocus() }
+                                ),
+                                focusRequester = phonePrimaryFocus
                             )
                             StyledTextField(
                                 value = state.phoneSecondary,
                                 onValueChange = viewModel::updatePhoneSecondary,
                                 label = "Alt. Phone",
                                 modifier = Modifier.weight(1f),
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Phone,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { 
+                                        collapseOtherSections("address")
+                                        addressExpanded = true
+                                        addressLine1Focus.requestFocus() 
+                                    }
+                                ),
+                                focusRequester = phoneSecondaryFocus
                             )
                         }
                     }
@@ -649,21 +749,39 @@ fun AddEditStudentScreen(
                         subtitle = "Residential details",
                         icon = Icons.Default.LocationOn,
                         accentColor = SectionAddress,
-                        isComplete = state.addressLine1.isNotBlank()
+                        isComplete = state.addressLine1.isNotBlank(),
+                        isExpanded = addressExpanded,
+                        onExpandChange = { addressExpanded = it }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             StyledTextField(
                                 value = state.addressLine1,
                                 onValueChange = viewModel::updateAddressLine1,
                                 label = "Address Line 1",
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Words,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { villageFocus.requestFocus() }
+                                ),
+                                focusRequester = addressLine1Focus
                             )
                             
                             StyledTextField(
                                 value = state.addressLine2,
                                 onValueChange = viewModel::updateAddressLine2,
                                 label = "Village",
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Words,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { districtFocus.requestFocus() }
+                                ),
+                                focusRequester = villageFocus
                             )
                             
                             // District with quick-fill
@@ -672,7 +790,15 @@ fun AddEditStudentScreen(
                                     value = state.district,
                                     onValueChange = viewModel::updateDistrict,
                                     label = "District",
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth(),
+                                    keyboardOptions = KeyboardOptions(
+                                        capitalization = KeyboardCapitalization.Words,
+                                        imeAction = ImeAction.Next
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onNext = { stateFocus.requestFocus() }
+                                    ),
+                                    focusRequester = districtFocus
                                 )
                                 QuickFillChip(
                                     value = "Shahjahanpur",
@@ -692,7 +818,15 @@ fun AddEditStudentScreen(
                                         value = state.state,
                                         onValueChange = viewModel::updateState,
                                         label = "State",
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier.fillMaxWidth(),
+                                        keyboardOptions = KeyboardOptions(
+                                            capitalization = KeyboardCapitalization.Words,
+                                            imeAction = ImeAction.Next
+                                        ),
+                                        keyboardActions = KeyboardActions(
+                                            onNext = { pincodeFocus.requestFocus() }
+                                        ),
+                                        focusRequester = stateFocus
                                     )
                                     QuickFillChip(
                                         value = "Uttar Pradesh",
@@ -711,7 +845,21 @@ fun AddEditStudentScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         isError = state.pincodeError != null,
                                         errorMessage = state.pincodeError,
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Number,
+                                            imeAction = if (state.isMigrationMode) ImeAction.Next else ImeAction.Done
+                                        ),
+                                        keyboardActions = KeyboardActions(
+                                            onNext = { 
+                                                collapseOtherSections("none") // Collapse all sections
+                                                openingBalanceFocus.requestFocus() 
+                                            },
+                                            onDone = { 
+                                                collapseOtherSections("none")
+                                                focusManager.clearFocus() 
+                                            }
+                                        ),
+                                        focusRequester = pincodeFocus
                                     )
                                     QuickFillChip(
                                         value = "242305",
@@ -736,7 +884,10 @@ fun AddEditStudentScreen(
                         isMigrationMode = state.isMigrationMode,
                         onBalanceChange = viewModel::updateOpeningBalance,
                         onRemarksChange = viewModel::updateOpeningBalanceRemarks,
-                        onCurrentYearPaidChange = viewModel::updateCurrentYearPaidAmount
+                        onCurrentYearPaidChange = viewModel::updateCurrentYearPaidAmount,
+                        openingBalanceFocus = openingBalanceFocus,
+                        currentYearPaidFocus = currentYearPaidFocus,
+                        focusManager = focusManager
                     )
                 }
                 
@@ -875,12 +1026,16 @@ fun MigrationModeBanner(
 fun NewAdmissionToggle(
     isNewAdmission: Boolean,
     onToggle: (Boolean) -> Unit,
-    isMigrationMode: Boolean
+    isMigrationMode: Boolean,
+    isEditMode: Boolean = false
 ) {
+    // In edit mode, the toggle is disabled because fees may already be in the ledger
+    val isEnabled = !isEditMode
+    
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = if (isNewAdmission) SectionClassInfo.copy(alpha = 0.08f)
-                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+        color = if (isNewAdmission) SectionClassInfo.copy(alpha = if (isEnabled) 0.08f else 0.04f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isEnabled) 0.25f else 0.15f),
         shape = RoundedCornerShape(10.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
@@ -893,45 +1048,51 @@ fun NewAdmissionToggle(
                     Text(
                         "New Admission This Year?",
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        color = if (isEnabled) MaterialTheme.colorScheme.onSurface 
+                               else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                     Text(
-                        if (isNewAdmission) "Admission fee will be applied"
+                        if (isEditMode) "Cannot change - fees already applied"
+                        else if (isNewAdmission) "Admission fee will be applied"
                         else "Already paid / continuing student",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (isEditMode) MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                               else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(
-                        onClick = { onToggle(true) },
+                        onClick = { if (isEnabled) onToggle(true) },
                         shape = RoundedCornerShape(6.dp),
-                        color = if (isNewAdmission) SectionClassInfo else Color.Transparent,
+                        color = if (isNewAdmission) SectionClassInfo.copy(alpha = if (isEnabled) 1f else 0.5f) else Color.Transparent,
                         border = if (!isNewAdmission) androidx.compose.foundation.BorderStroke(
-                            1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                            1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (isEnabled) 0.4f else 0.2f)
                         ) else null
                     ) {
                         Text(
                             "Yes",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (isNewAdmission) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isNewAdmission) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (isNewAdmission) Color.White.copy(alpha = if (isEnabled) 1f else 0.7f) 
+                                   else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isEnabled) 1f else 0.5f),
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                         )
                     }
                     Surface(
-                        onClick = { onToggle(false) },
+                        onClick = { if (isEnabled) onToggle(false) },
                         shape = RoundedCornerShape(6.dp),
-                        color = if (!isNewAdmission) MaterialTheme.colorScheme.outline else Color.Transparent,
+                        color = if (!isNewAdmission) MaterialTheme.colorScheme.outline.copy(alpha = if (isEnabled) 1f else 0.5f) else Color.Transparent,
                         border = if (isNewAdmission) androidx.compose.foundation.BorderStroke(
-                            1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                            1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (isEnabled) 0.4f else 0.2f)
                         ) else null
                     ) {
                         Text(
                             "No",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (!isNewAdmission) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (!isNewAdmission) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (!isNewAdmission) Color.White.copy(alpha = if (isEnabled) 1f else 0.7f) 
+                                   else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isEnabled) 1f else 0.5f),
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                         )
                     }
@@ -939,7 +1100,7 @@ fun NewAdmissionToggle(
             }
             
             // Show hint when migration mode affects this - with icon instead of emoji
-            AnimatedVisibility(visible = isMigrationMode) {
+            AnimatedVisibility(visible = isMigrationMode && !isEditMode) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 6.dp)
@@ -969,9 +1130,16 @@ fun FormSectionCard(
     icon: ImageVector,
     accentColor: Color,
     isComplete: Boolean = false,
+    isExpanded: Boolean = true,
+    onExpandChange: ((Boolean) -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    var isExpanded by remember { mutableStateOf(true) }
+    // Use internal state if no external control provided
+    var internalExpanded by remember { mutableStateOf(true) }
+    val expanded = if (onExpandChange != null) isExpanded else internalExpanded
+    val setExpanded: (Boolean) -> Unit = { value ->
+        if (onExpandChange != null) onExpandChange(value) else internalExpanded = value
+    }
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -994,7 +1162,7 @@ fun FormSectionCard(
                             )
                         )
                     )
-                    .clickable { isExpanded = !isExpanded }
+                    .clickable { setExpanded(!expanded) }
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Row(
@@ -1051,8 +1219,8 @@ fun FormSectionCard(
                         }
                     }
                     Icon(
-                        if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
                         tint = accentColor,
                         modifier = Modifier.size(22.dp)
                     )
@@ -1061,7 +1229,7 @@ fun FormSectionCard(
             
             // Content - more compact padding
             AnimatedVisibility(
-                visible = isExpanded,
+                visible = expanded,
                 enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) + fadeIn(),
                 exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)) + fadeOut()
             ) {
@@ -1082,19 +1250,24 @@ fun StyledTextField(
     isError: Boolean = false,
     errorMessage: String? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
     singleLine: Boolean = true,
-    prefix: @Composable (() -> Unit)? = null
+    prefix: @Composable (() -> Unit)? = null,
+    focusRequester: FocusRequester? = null
 ) {
     Column(modifier = modifier) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             label = { Text(label, style = MaterialTheme.typography.bodySmall) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
             isError = isError,
             singleLine = singleLine,
             shape = RoundedCornerShape(10.dp),
             keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
             prefix = prefix,
             textStyle = MaterialTheme.typography.bodyMedium,
             colors = OutlinedTextFieldDefaults.colors(
@@ -1167,7 +1340,10 @@ fun OpeningBalanceSectionCard(
     isMigrationMode: Boolean,
     onBalanceChange: (String) -> Unit,
     onRemarksChange: (String) -> Unit,
-    onCurrentYearPaidChange: (String) -> Unit
+    onCurrentYearPaidChange: (String) -> Unit,
+    openingBalanceFocus: FocusRequester? = null,
+    currentYearPaidFocus: FocusRequester? = null,
+    focusManager: androidx.compose.ui.focus.FocusManager? = null
 ) {
     var isExpanded by remember { 
         mutableStateOf(isMigrationMode || openingBalance.isNotBlank() || currentYearPaidAmount.isNotBlank()) 
@@ -1324,14 +1500,28 @@ fun OpeningBalanceSectionCard(
                                 prefix = { Text("₹ ") },
                                 isError = openingBalanceError != null,
                                 errorMessage = openingBalanceError,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { currentYearPaidFocus?.requestFocus() ?: focusManager?.clearFocus() }
+                                ),
+                                focusRequester = openingBalanceFocus
                             )
                             Spacer(Modifier.height(6.dp))
                             StyledTextField(
                                 value = openingBalanceRemarks,
                                 onValueChange = onRemarksChange,
                                 label = if (isMigrationMode) "Remarks (e.g., 2024-25 dues)" 
-                                       else "Reason"
+                                       else "Reason",
+                                keyboardOptions = KeyboardOptions(
+                                    imeAction = if (isMigrationMode) ImeAction.Next else ImeAction.Done
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onNext = { currentYearPaidFocus?.requestFocus() },
+                                    onDone = { focusManager?.clearFocus() }
+                                )
                             )
                         }
                     }
@@ -1370,7 +1560,14 @@ fun OpeningBalanceSectionCard(
                                     onValueChange = onCurrentYearPaidChange,
                                     label = "Amount Received",
                                     prefix = { Text("₹ ") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Number,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = { focusManager?.clearFocus() }
+                                    ),
+                                    focusRequester = currentYearPaidFocus
                                 )
                             }
                         }

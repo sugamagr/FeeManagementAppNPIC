@@ -201,13 +201,11 @@ class FeeRepositoryImpl @Inject constructor(
                 )
             )
             
-            // Reverse ledger entries
+            // Reverse ledger entries (marks original entries as reversed)
             ledgerDao.reverseEntriesForReceipt(receiptId)
             
-            // Create reversal entry for payment amount
-            var currentBalance = ledgerDao.getCurrentBalance(receipt.studentId)
-            var newBalance = currentBalance + receipt.netAmount
-            
+            // Create reversal DEBIT entry for payment amount
+            // Balance is temporary (0.0) - will be recalculated at the end
             val reversalEntry = LedgerEntryEntity(
                 studentId = receipt.studentId,
                 sessionId = receipt.sessionId,
@@ -216,7 +214,7 @@ class FeeRepositoryImpl @Inject constructor(
                 entryType = LedgerEntryType.DEBIT,
                 debitAmount = receipt.netAmount,
                 creditAmount = 0.0,
-                balance = newBalance,
+                balance = 0.0, // Temporary - will be recalculated
                 referenceType = LedgerReferenceType.REVERSAL,
                 referenceId = receiptId
             )
@@ -224,9 +222,6 @@ class FeeRepositoryImpl @Inject constructor(
             
             // Also reverse discount if there was one
             if (receipt.discountAmount > 0) {
-                currentBalance = newBalance
-                newBalance = currentBalance + receipt.discountAmount
-                
                 val discountReversalEntry = LedgerEntryEntity(
                     studentId = receipt.studentId,
                     sessionId = receipt.sessionId,
@@ -235,12 +230,15 @@ class FeeRepositoryImpl @Inject constructor(
                     entryType = LedgerEntryType.DEBIT,
                     debitAmount = receipt.discountAmount,
                     creditAmount = 0.0,
-                    balance = newBalance,
+                    balance = 0.0, // Temporary - will be recalculated
                     referenceType = LedgerReferenceType.REVERSAL,
                     referenceId = receiptId
                 )
                 ledgerDao.insert(discountReversalEntry)
             }
+            
+            // Recalculate all balances for this student to ensure correctness
+            recalculateStudentBalances(receipt.studentId)
         }
     }
     
@@ -545,145 +543,192 @@ class FeeRepositoryImpl @Inject constructor(
         entryId
     }
     
+    override suspend fun syncOpeningBalanceEntry(
+        studentId: Long,
+        sessionId: Long,
+        newAmount: Double,
+        date: Long,
+        remarks: String
+    ): Result<Unit> = runCatching {
+        val existingEntry = ledgerDao.getOpeningBalanceEntry(studentId, sessionId)
+        
+        when {
+            // Case 1: No entry exists and new amount is 0 -> do nothing
+            existingEntry == null && newAmount <= 0 -> {
+                // Nothing to do
+            }
+            
+            // Case 2: No entry exists but new amount > 0 -> create entry
+            existingEntry == null && newAmount > 0 -> {
+                createOpeningBalanceEntry(studentId, sessionId, newAmount, date, remarks)
+            }
+            
+            // Case 3: Entry exists but new amount is 0 -> delete entry
+            existingEntry != null && newAmount <= 0 -> {
+                ledgerDao.deleteOpeningBalanceEntry(studentId, sessionId)
+                recalculateStudentBalances(studentId)
+            }
+            
+            // Case 4: Entry exists and new amount > 0 -> update entry
+            existingEntry != null && newAmount > 0 -> {
+                val particulars = if (remarks.isNotBlank()) {
+                    "Opening Balance - $remarks"
+                } else {
+                    "Opening Balance (Previous Year Dues)"
+                }
+                ledgerDao.updateOpeningBalanceEntry(studentId, sessionId, newAmount, particulars)
+                recalculateStudentBalances(studentId)
+            }
+        }
+    }
+    
     override suspend fun addSessionFeesForStudent(
         studentId: Long,
         sessionId: Long,
         addTuition: Boolean,
         addTransport: Boolean
     ): Result<Double> = runCatching {
-        val student = studentDao.getById(studentId) ?: throw IllegalArgumentException("Student not found")
-        val session = academicSessionDao.getById(sessionId) ?: throw IllegalArgumentException("Session not found")
-        val className = student.currentClass
-        val sessionStartDate = session.startDate
-        val sessionName = session.sessionName
-        
-        var totalFeesAdded = 0.0
-        
-        // Add admission fee if not already paid
-        if (!student.admissionFeePaid) {
-            val admissionFee = feeStructureDao.getAdmissionFee(sessionId, className)
-            if (admissionFee != null && admissionFee.amount > 0) {
-                val ledgerEntry = LedgerEntryEntity(
-                    studentId = studentId,
-                    sessionId = sessionId,
-                    entryDate = sessionStartDate,
-                    particulars = "Admission Fee (New Admission)",
-                    entryType = LedgerEntryType.DEBIT,
-                    debitAmount = admissionFee.amount,
-                    creditAmount = 0.0,
-                    balance = 0.0, // Temporary - will be recalculated
-                    referenceType = LedgerReferenceType.FEE_CHARGE,
-                    referenceId = 0
-                )
-                ledgerDao.insert(ledgerEntry)
-                totalFeesAdded += admissionFee.amount
-                
-                // Mark admission fee as paid to prevent duplicate charges
-                studentDao.updateAdmissionFeePaid(studentId, true)
-            }
+        // Check for duplicate fee entries - prevent adding fees twice
+        if (hasSessionFeeEntries(studentId, sessionId)) {
+            return@runCatching 0.0 // Already has fee entries, skip
         }
         
-        // Add tuition fees (with temporary balance - will be recalculated at end)
-        if (addTuition) {
-            val isMonthlyClass = className in FeeStructure.MONTHLY_FEE_CLASSES
+        // Use transaction to ensure all fee entries are added atomically
+        database.withTransaction {
+            val student = studentDao.getById(studentId) ?: throw IllegalArgumentException("Student not found")
+            val session = academicSessionDao.getById(sessionId) ?: throw IllegalArgumentException("Session not found")
+            val className = student.currentClass
+            val sessionStartDate = session.startDate
+            val sessionName = session.sessionName
             
-            if (isMonthlyClass) {
-                // Monthly fee for 12 months
-                val monthlyFee = feeStructureDao.getFeeForClass(sessionId, className, FeeType.MONTHLY)
-                if (monthlyFee != null && monthlyFee.amount > 0) {
-                    val totalTuition = monthlyFee.amount * 12
+            var totalFeesAdded = 0.0
+            
+            // Add admission fee if not already paid
+            if (!student.admissionFeePaid) {
+                val admissionFee = feeStructureDao.getAdmissionFee(sessionId, className)
+                if (admissionFee != null && admissionFee.amount > 0) {
+                    val ledgerEntry = LedgerEntryEntity(
+                        studentId = studentId,
+                        sessionId = sessionId,
+                        entryDate = sessionStartDate,
+                        particulars = "Admission Fee (New Admission)",
+                        entryType = LedgerEntryType.DEBIT,
+                        debitAmount = admissionFee.amount,
+                        creditAmount = 0.0,
+                        balance = 0.0, // Temporary - will be recalculated
+                        referenceType = LedgerReferenceType.FEE_CHARGE,
+                        referenceId = 0
+                    )
+                    ledgerDao.insert(ledgerEntry)
+                    totalFeesAdded += admissionFee.amount
                     
-                    val ledgerEntry = LedgerEntryEntity(
-                        studentId = studentId,
-                        sessionId = sessionId,
-                        entryDate = sessionStartDate,
-                        particulars = "Tuition Fee - Session $sessionName (12 months @ ₹${monthlyFee.amount.toInt()}/month)",
-                        entryType = LedgerEntryType.DEBIT,
-                        debitAmount = totalTuition,
-                        creditAmount = 0.0,
-                        balance = 0.0, // Temporary - will be recalculated
-                        referenceType = LedgerReferenceType.FEE_CHARGE,
-                        referenceId = 0
-                    )
-                    ledgerDao.insert(ledgerEntry)
-                    totalFeesAdded += totalTuition
+                    // Mark admission fee as paid to prevent duplicate charges
+                    studentDao.updateAdmissionFeePaid(studentId, true)
                 }
-            } else {
-                // Annual fee for higher classes
-                val annualFee = feeStructureDao.getFeeForClass(sessionId, className, FeeType.ANNUAL)
-                if (annualFee != null && annualFee.amount > 0) {
-                    val ledgerEntry = LedgerEntryEntity(
-                        studentId = studentId,
-                        sessionId = sessionId,
-                        entryDate = sessionStartDate,
-                        particulars = "Annual Fee - Session $sessionName",
-                        entryType = LedgerEntryType.DEBIT,
-                        debitAmount = annualFee.amount,
-                        creditAmount = 0.0,
-                        balance = 0.0, // Temporary - will be recalculated
-                        referenceType = LedgerReferenceType.FEE_CHARGE,
-                        referenceId = 0
-                    )
-                    ledgerDao.insert(ledgerEntry)
-                    totalFeesAdded += annualFee.amount
-                }
+            }
+            
+            // Add tuition fees (with temporary balance - will be recalculated at end)
+            if (addTuition) {
+                val isMonthlyClass = className in FeeStructure.MONTHLY_FEE_CLASSES
                 
-                // Registration fee for 9th-12th
-                if (className in FeeStructure.REGISTRATION_FEE_CLASSES) {
-                    val regFee = feeStructureDao.getRegistrationFee(sessionId, className)
-                    if (regFee != null && regFee.amount > 0) {
+                if (isMonthlyClass) {
+                    // Monthly fee for 12 months
+                    val monthlyFee = feeStructureDao.getFeeForClass(sessionId, className, FeeType.MONTHLY)
+                    if (monthlyFee != null && monthlyFee.amount > 0) {
+                        val totalTuition = monthlyFee.amount * 12
+                        
                         val ledgerEntry = LedgerEntryEntity(
                             studentId = studentId,
                             sessionId = sessionId,
                             entryDate = sessionStartDate,
-                            particulars = "Registration Fee - Session $sessionName",
+                            particulars = "Tuition Fee - Session $sessionName (12 months @ ₹${monthlyFee.amount.toInt()}/month)",
                             entryType = LedgerEntryType.DEBIT,
-                            debitAmount = regFee.amount,
+                            debitAmount = totalTuition,
                             creditAmount = 0.0,
                             balance = 0.0, // Temporary - will be recalculated
                             referenceType = LedgerReferenceType.FEE_CHARGE,
                             referenceId = 0
                         )
                         ledgerDao.insert(ledgerEntry)
-                        totalFeesAdded += regFee.amount
+                        totalFeesAdded += totalTuition
+                    }
+                } else {
+                    // Annual fee for higher classes
+                    val annualFee = feeStructureDao.getFeeForClass(sessionId, className, FeeType.ANNUAL)
+                    if (annualFee != null && annualFee.amount > 0) {
+                        val ledgerEntry = LedgerEntryEntity(
+                            studentId = studentId,
+                            sessionId = sessionId,
+                            entryDate = sessionStartDate,
+                            particulars = "Annual Fee - Session $sessionName",
+                            entryType = LedgerEntryType.DEBIT,
+                            debitAmount = annualFee.amount,
+                            creditAmount = 0.0,
+                            balance = 0.0, // Temporary - will be recalculated
+                            referenceType = LedgerReferenceType.FEE_CHARGE,
+                            referenceId = 0
+                        )
+                        ledgerDao.insert(ledgerEntry)
+                        totalFeesAdded += annualFee.amount
+                    }
+                    
+                    // Registration fee for 9th-12th
+                    if (className in FeeStructure.REGISTRATION_FEE_CLASSES) {
+                        val regFee = feeStructureDao.getRegistrationFee(sessionId, className)
+                        if (regFee != null && regFee.amount > 0) {
+                            val ledgerEntry = LedgerEntryEntity(
+                                studentId = studentId,
+                                sessionId = sessionId,
+                                entryDate = sessionStartDate,
+                                particulars = "Registration Fee - Session $sessionName",
+                                entryType = LedgerEntryType.DEBIT,
+                                debitAmount = regFee.amount,
+                                creditAmount = 0.0,
+                                balance = 0.0, // Temporary - will be recalculated
+                                referenceType = LedgerReferenceType.FEE_CHARGE,
+                                referenceId = 0
+                            )
+                            ledgerDao.insert(ledgerEntry)
+                            totalFeesAdded += regFee.amount
+                        }
                     }
                 }
             }
-        }
-        
-        // Add transport fees (11 months - June excluded)
-        if (addTransport && student.hasTransport && student.transportRouteId != null) {
-            val route = transportRouteDao.getById(student.transportRouteId)
-            if (route != null) {
-                val monthlyTransportFee = route.getFeeForClass(className)
-                val transportMonths = 11 // June excluded
-                val totalTransportFee = monthlyTransportFee * transportMonths
-                
-                if (totalTransportFee > 0) {
-                    val ledgerEntry = LedgerEntryEntity(
-                        studentId = studentId,
-                        sessionId = sessionId,
-                        entryDate = sessionStartDate,
-                        particulars = "Transport Fee - Session $sessionName (11 months excl. June, ${route.routeName})",
-                        entryType = LedgerEntryType.DEBIT,
-                        debitAmount = totalTransportFee,
-                        creditAmount = 0.0,
-                        balance = 0.0, // Temporary - will be recalculated
-                        referenceType = LedgerReferenceType.FEE_CHARGE,
-                        referenceId = 0
-                    )
-                    ledgerDao.insert(ledgerEntry)
-                    totalFeesAdded += totalTransportFee
+            
+            // Add transport fees (11 months - June excluded)
+            if (addTransport && student.hasTransport && student.transportRouteId != null) {
+                val route = transportRouteDao.getById(student.transportRouteId)
+                if (route != null) {
+                    val monthlyTransportFee = route.getFeeForClass(className)
+                    val transportMonths = 11 // June excluded
+                    val totalTransportFee = monthlyTransportFee * transportMonths
+                    
+                    if (totalTransportFee > 0) {
+                        val ledgerEntry = LedgerEntryEntity(
+                            studentId = studentId,
+                            sessionId = sessionId,
+                            entryDate = sessionStartDate,
+                            particulars = "Transport Fee - Session $sessionName (11 months excl. June, ${route.routeName})",
+                            entryType = LedgerEntryType.DEBIT,
+                            debitAmount = totalTransportFee,
+                            creditAmount = 0.0,
+                            balance = 0.0, // Temporary - will be recalculated
+                            referenceType = LedgerReferenceType.FEE_CHARGE,
+                            referenceId = 0
+                        )
+                        ledgerDao.insert(ledgerEntry)
+                        totalFeesAdded += totalTransportFee
+                    }
                 }
             }
+            
+            // Recalculate all balances to ensure correct running totals
+            if (totalFeesAdded > 0) {
+                recalculateStudentBalances(studentId)
+            }
+            
+            totalFeesAdded
         }
-        
-        // Recalculate all balances to ensure correct running totals
-        if (totalFeesAdded > 0) {
-            recalculateStudentBalances(studentId)
-        }
-        
-        totalFeesAdded
     }
     
     override suspend fun addSessionFeesForAllStudents(

@@ -310,33 +310,36 @@ fun DefaultersScreen(
     }
     
     // Phone Selection Dialog
-    if (showPhoneSelectionDialog && selectedDefaulterForPhone != null) {
-        PhoneSelectionDialog(
-            defaulter = selectedDefaulterForPhone!!,
-            actionType = phoneSelectionType!!,
-            onPhoneSelected = { phone ->
-                showPhoneSelectionDialog = false
-                when (phoneSelectionType) {
-                    PhoneActionType.CALL -> {
-                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                            data = Uri.parse("tel:$phone")
+    if (showPhoneSelectionDialog) {
+        selectedDefaulterForPhone?.let { defaulter ->
+            phoneSelectionType?.let { actionType ->
+                PhoneSelectionDialog(
+                    defaulter = defaulter,
+                    actionType = actionType,
+                    onPhoneSelected = { phone ->
+                        showPhoneSelectionDialog = false
+                        when (actionType) {
+                            PhoneActionType.CALL -> {
+                                val intent = Intent(Intent.ACTION_DIAL).apply {
+                                    data = Uri.parse("tel:$phone")
+                                }
+                                context.startActivity(intent)
+                            }
+                            PhoneActionType.WHATSAPP -> {
+                                openWhatsApp(context, phone, defaulter)
+                            }
                         }
-                        context.startActivity(intent)
+                        selectedDefaulterForPhone = null
+                        phoneSelectionType = null
+                    },
+                    onDismiss = {
+                        showPhoneSelectionDialog = false
+                        selectedDefaulterForPhone = null
+                        phoneSelectionType = null
                     }
-                    PhoneActionType.WHATSAPP -> {
-                        openWhatsApp(context, phone, selectedDefaulterForPhone!!)
-                    }
-                    null -> {}
-                }
-                selectedDefaulterForPhone = null
-                phoneSelectionType = null
-            },
-            onDismiss = {
-                showPhoneSelectionDialog = false
-                selectedDefaulterForPhone = null
-                phoneSelectionType = null
+                )
             }
-        )
+        }
     }
 }
 

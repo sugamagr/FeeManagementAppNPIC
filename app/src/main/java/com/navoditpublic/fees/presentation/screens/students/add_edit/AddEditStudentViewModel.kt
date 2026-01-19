@@ -916,9 +916,27 @@ class AddEditStudentViewModel @Inject constructor(
                 )
                 
                 if (_state.value.isEditMode) {
+                    // In edit mode, studentId must be non-null - capture for safe access
+                    val editStudentId = studentId ?: run {
+                        _events.emit(AddEditStudentEvent.Error("Invalid student ID"))
+                        return@launch
+                    }
+                    
                     studentRepository.update(student).onSuccess {
                         // Update transport enrollments
-                        saveTransportEnrollments(studentId!!)
+                        saveTransportEnrollments(editStudentId)
+                        
+                        // Sync opening balance ledger entry with student entity
+                        // This handles create/update/delete based on the new amount
+                        if (currentSession != null) {
+                            feeRepository.syncOpeningBalanceEntry(
+                                studentId = editStudentId,
+                                sessionId = sessionId,
+                                newAmount = openingBalanceAmount,
+                                date = currentSession.startDate ?: System.currentTimeMillis(),
+                                remarks = _state.value.openingBalanceRemarks.trim()
+                            )
+                        }
                         
                         // Log the update
                         auditRepository.logUpdate(
@@ -1047,13 +1065,16 @@ class AddEditStudentViewModel @Inject constructor(
         val accountNumber = _state.value.accountNumber.trim()
         val name = _state.value.name.trim()
         
+        // Capture studentId for edit mode validations
+        val editStudentId = if (_state.value.isEditMode) studentId else null
+        
         // SR Number validation
         if (srNumber.isBlank()) {
             _state.value = _state.value.copy(srNumberError = "SR Number is required")
             isValid = false
         } else {
-            val exists = if (_state.value.isEditMode) {
-                studentRepository.srNumberExistsExcluding(srNumber, studentId!!)
+            val exists = if (_state.value.isEditMode && editStudentId != null) {
+                studentRepository.srNumberExistsExcluding(srNumber, editStudentId)
             } else {
                 studentRepository.srNumberExists(srNumber)
             }
@@ -1068,8 +1089,8 @@ class AddEditStudentViewModel @Inject constructor(
             _state.value = _state.value.copy(accountNumberError = "Account Number is required")
             isValid = false
         } else {
-            val exists = if (_state.value.isEditMode) {
-                studentRepository.accountNumberExistsExcluding(accountNumber, studentId!!)
+            val exists = if (_state.value.isEditMode && editStudentId != null) {
+                studentRepository.accountNumberExistsExcluding(accountNumber, editStudentId)
             } else {
                 studentRepository.accountNumberExists(accountNumber)
             }

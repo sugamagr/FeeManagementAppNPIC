@@ -400,7 +400,8 @@ class CollectFeeViewModel @Inject constructor(
                     return@launch
                 }
                 
-                if (_state.value.selectedStudent == null) {
+                // Capture selected student safely to prevent race conditions
+                val selectedStudent = _state.value.selectedStudent ?: run {
                     _events.emit(CollectFeeEvent.Error("Please select a student"))
                     return@launch
                 }
@@ -427,7 +428,7 @@ class CollectFeeViewModel @Inject constructor(
                 
                 _state.value = _state.value.copy(isSaving = true)
                 
-                val student = _state.value.selectedStudent!!.student
+                val student = selectedStudent.student
                 val discount = _state.value.discount
                 
                 // Build description for receipt

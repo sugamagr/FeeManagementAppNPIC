@@ -198,16 +198,18 @@ fun ClassesSectionsScreen(
     }
     
     // Delete Confirmation Dialog - Enhanced
-    if (showDeleteConfirmDialog && sectionToDelete != null) {
-        DeleteConfirmationDialog(
-            className = sectionToDelete!!.first,
-            sectionName = sectionToDelete!!.second,
-            onConfirm = { viewModel.deleteSection(sectionToDelete!!.first, sectionToDelete!!.second) },
-            onDismiss = { 
-                showDeleteConfirmDialog = false 
-                sectionToDelete = null
-            }
-        )
+    if (showDeleteConfirmDialog) {
+        sectionToDelete?.let { (className, sectionName) ->
+            DeleteConfirmationDialog(
+                className = className,
+                sectionName = sectionName,
+                onConfirm = { viewModel.deleteSection(className, sectionName) },
+                onDismiss = { 
+                    showDeleteConfirmDialog = false 
+                    sectionToDelete = null
+                }
+            )
+        }
     }
     
     Scaffold(

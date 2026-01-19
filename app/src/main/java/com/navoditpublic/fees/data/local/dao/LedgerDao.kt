@@ -163,6 +163,43 @@ interface LedgerDao {
      */
     @Query("UPDATE ledger_entries SET balance = :newBalance WHERE id = :entryId")
     suspend fun updateBalance(entryId: Long, newBalance: Double)
+    
+    /**
+     * Get opening balance entry for a student in a session
+     */
+    @Query("""
+        SELECT * FROM ledger_entries 
+        WHERE student_id = :studentId 
+        AND session_id = :sessionId 
+        AND reference_type = 'OPENING_BALANCE'
+        AND is_reversed = 0
+        LIMIT 1
+    """)
+    suspend fun getOpeningBalanceEntry(studentId: Long, sessionId: Long): LedgerEntryEntity?
+    
+    /**
+     * Update opening balance entry amount and remarks
+     */
+    @Query("""
+        UPDATE ledger_entries 
+        SET debit_amount = :amount, particulars = :particulars 
+        WHERE student_id = :studentId 
+        AND session_id = :sessionId 
+        AND reference_type = 'OPENING_BALANCE'
+        AND is_reversed = 0
+    """)
+    suspend fun updateOpeningBalanceEntry(studentId: Long, sessionId: Long, amount: Double, particulars: String)
+    
+    /**
+     * Delete opening balance entry for a student
+     */
+    @Query("""
+        DELETE FROM ledger_entries 
+        WHERE student_id = :studentId 
+        AND session_id = :sessionId 
+        AND reference_type = 'OPENING_BALANCE'
+    """)
+    suspend fun deleteOpeningBalanceEntry(studentId: Long, sessionId: Long)
 }
 
 

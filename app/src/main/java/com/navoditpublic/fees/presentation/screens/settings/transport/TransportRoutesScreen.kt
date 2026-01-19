@@ -388,72 +388,76 @@ fun TransportRoutesScreen(
     // Bottom Sheets
     
     // More Options Sheet (Custom)
-    if (showMoreOptionsSheet && selectedRoute != null) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        
-        ModalBottomSheet(
-            onDismissRequest = { showMoreOptionsSheet = false },
-            sheetState = sheetState,
-            containerColor = Color.White,
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            dragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .background(Color(0xFFE0E0E0), RoundedCornerShape(2.dp))
-                )
-            }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 24.dp)
+    if (showMoreOptionsSheet) {
+        selectedRoute?.let { route ->
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            
+            ModalBottomSheet(
+                onDismissRequest = { showMoreOptionsSheet = false },
+                sheetState = sheetState,
+                containerColor = Color.White,
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                dragHandle = {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 12.dp)
+                            .width(40.dp)
+                            .height(4.dp)
+                            .background(Color(0xFFE0E0E0), RoundedCornerShape(2.dp))
+                    )
+                }
             ) {
-                Text(
-                    text = selectedRoute!!.routeName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                
-                OptionItem(
-                    icon = Icons.Rounded.History,
-                    title = "View Fee History",
-                    subtitle = "See all fee changes",
-                    color = AccentBlue,
-                    onClick = {
-                        showMoreOptionsSheet = false
-                        scope.launch {
-                            feeHistory = viewModel.getFeeHistory(selectedRoute!!.id)
-                            showFeeHistorySheet = true
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 24.dp)
+                ) {
+                    Text(
+                        text = route.routeName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    
+                    OptionItem(
+                        icon = Icons.Rounded.History,
+                        title = "View Fee History",
+                        subtitle = "See all fee changes",
+                        color = AccentBlue,
+                        onClick = {
+                            showMoreOptionsSheet = false
+                            scope.launch {
+                                feeHistory = viewModel.getFeeHistory(route.id)
+                                showFeeHistorySheet = true
+                            }
                         }
-                    }
-                )
-                
-                Spacer(Modifier.height(8.dp))
-                
-                OptionItem(
-                    icon = Icons.Rounded.PowerSettingsNew,
-                    title = "Close Route",
-                    subtitle = "Preserve history, stop usage",
-                    color = WarningAmber,
-                    onClick = {
-                        showMoreOptionsSheet = false
-                        closeDate = System.currentTimeMillis()
-                        closeReason = ""
-                        showCloseSheet = true
-                    }
-                )
+                    )
+                    
+                    Spacer(Modifier.height(8.dp))
+                    
+                    OptionItem(
+                        icon = Icons.Rounded.PowerSettingsNew,
+                        title = "Close Route",
+                        subtitle = "Preserve history, stop usage",
+                        color = WarningAmber,
+                        onClick = {
+                            showMoreOptionsSheet = false
+                            closeDate = System.currentTimeMillis()
+                            closeReason = ""
+                            showCloseSheet = true
+                        }
+                    )
+                }
             }
         }
     }
     
     // Add/Edit Route Sheet
     if (showAddEditSheet) {
-        val isEditing = selectedRoute != null
+        // Capture route for safe access in callbacks
+        val routeBeingEdited = selectedRoute
+        val isEditing = routeBeingEdited != null
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         
         ModalBottomSheet(
@@ -546,21 +550,23 @@ fun TransportRoutesScreen(
                     Spacer(Modifier.height(12.dp))
                 } else {
                     // Current fees display
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFFF8F9FA),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly
+                    routeBeingEdited?.let { route ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Color(0xFFF8F9FA),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            FeeChip("NC-5", "₹${selectedRoute!!.feeNcTo5.toInt()}")
-                            FeeChip("6-8", "₹${selectedRoute!!.fee6To8.toInt()}")
-                            FeeChip("9-12", "₹${selectedRoute!!.fee9To12.toInt()}")
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                FeeChip("NC-5", "₹${route.feeNcTo5.toInt()}")
+                                FeeChip("6-8", "₹${route.fee6To8.toInt()}")
+                                FeeChip("9-12", "₹${route.fee9To12.toInt()}")
+                            }
                         }
+                        Spacer(Modifier.height(12.dp))
                     }
-                    Spacer(Modifier.height(12.dp))
                 }
                 
                 StyledTextField(
@@ -588,16 +594,16 @@ fun TransportRoutesScreen(
                     GradientButton(
                         text = if (isEditing) "Update" else "Add Route",
                     onClick = {
-                            if (isEditing) {
+                        routeBeingEdited?.let { route ->
                             viewModel.updateRoute(
-                                id = selectedRoute!!.id,
+                                id = route.id,
                                 name = routeName,
-                                    feeNcTo5 = selectedRoute!!.feeNcTo5,
-                                    fee6To8 = selectedRoute!!.fee6To8,
-                                    fee9To12 = selectedRoute!!.fee9To12,
+                                feeNcTo5 = route.feeNcTo5,
+                                fee6To8 = route.fee6To8,
+                                fee9To12 = route.fee9To12,
                                 description = description
                             )
-                        } else {
+                        } ?: run {
                             viewModel.addRoute(
                                 name = routeName,
                                 feeNcTo5 = feeNcTo5.toDoubleOrNull() ?: 0.0,
@@ -616,85 +622,86 @@ fun TransportRoutesScreen(
     }
     
     // Change Fee Sheet
-    if (showChangeFeeSheet && selectedRoute != null) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        val calendar = Calendar.getInstance()
-        val datePickerDialog = DatePickerDialog(
-            context,
-            { _, year, month, dayOfMonth ->
-                calendar.set(year, month, dayOfMonth)
-                effectiveDate = calendar.timeInMillis
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        )
-        
-        ModalBottomSheet(
-            onDismissRequest = { showChangeFeeSheet = false },
-            sheetState = sheetState,
-            containerColor = Color.White,
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            dragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .background(Color(0xFFE0E0E0), RoundedCornerShape(2.dp))
-                )
-            }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 24.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    GradientIconBox(
-                        icon = Icons.Rounded.MonetizationOn,
-                        gradient = Brush.linearGradient(listOf(AccentTeal, AccentBlue))
+    if (showChangeFeeSheet) {
+        selectedRoute?.let { route ->
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            val calendar = Calendar.getInstance()
+            val datePickerDialog = DatePickerDialog(
+                context,
+                { _, year, month, dayOfMonth ->
+                    calendar.set(year, month, dayOfMonth)
+                    effectiveDate = calendar.timeInMillis
+                },
+                calendar.get(Calendar.YEAR),
+                calendar.get(Calendar.MONTH),
+                calendar.get(Calendar.DAY_OF_MONTH)
+            )
+            
+            ModalBottomSheet(
+                onDismissRequest = { showChangeFeeSheet = false },
+                sheetState = sheetState,
+                containerColor = Color.White,
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                dragHandle = {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 12.dp)
+                            .width(40.dp)
+                            .height(4.dp)
+                            .background(Color(0xFFE0E0E0), RoundedCornerShape(2.dp))
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                    Text(
-                            "Update Fees",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                            selectedRoute!!.routeName,
-                        style = MaterialTheme.typography.bodySmall,
-                            color = AccentTeal
-                        )
-                    }
                 }
-                
-                Spacer(Modifier.height(16.dp))
-                
-                // Current fees
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFFF0FDF4),
-                    shape = RoundedCornerShape(10.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 24.dp)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            "Current",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF22C55E)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        GradientIconBox(
+                            icon = Icons.Rounded.MonetizationOn,
+                            gradient = Brush.linearGradient(listOf(AccentTeal, AccentBlue))
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceAround
-                        ) {
-                            Text("₹${selectedRoute!!.feeNcTo5.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("₹${selectedRoute!!.fee6To8.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("₹${selectedRoute!!.fee9To12.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                        Text(
+                                "Update Fees",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                                route.routeName,
+                            style = MaterialTheme.typography.bodySmall,
+                                color = AccentTeal
+                            )
                         }
                     }
-                }
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    // Current fees
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFFF0FDF4),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                "Current",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF22C55E)
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceAround
+                            ) {
+                                Text("₹${route.feeNcTo5.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("₹${route.fee6To8.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("₹${route.fee9To12.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
+                    }
                 
                 Spacer(Modifier.height(16.dp))
                 
@@ -775,166 +782,170 @@ fun TransportRoutesScreen(
                     }
                     
 GradientButton(
-                         text = "Update Fee",
-                    onClick = {
-                        viewModel.updateFeeWithEffectiveDate(
-                                routeId = selectedRoute!!.id,
-                                feeNcTo5 = feeNcTo5.toDoubleOrNull() ?: 0.0,
-                                fee6To8 = fee6To8.toDoubleOrNull() ?: 0.0,
-                                fee9To12 = fee9To12.toDoubleOrNull() ?: 0.0,
-                                effectiveFrom = effectiveDate,
-                                notes = feeNotes
-                            )
-                        },
-                        enabled = feeNcTo5.isNotBlank(),
-                        modifier = Modifier.weight(1f),
-                        gradient = Brush.linearGradient(listOf(AccentTeal, AccentBlue))
-                    )
+                             text = "Update Fee",
+                        onClick = {
+                            viewModel.updateFeeWithEffectiveDate(
+                                    routeId = route.id,
+                                    feeNcTo5 = feeNcTo5.toDoubleOrNull() ?: 0.0,
+                                    fee6To8 = fee6To8.toDoubleOrNull() ?: 0.0,
+                                    fee9To12 = fee9To12.toDoubleOrNull() ?: 0.0,
+                                    effectiveFrom = effectiveDate,
+                                    notes = feeNotes
+                                )
+                            },
+                            enabled = feeNcTo5.isNotBlank(),
+                            modifier = Modifier.weight(1f),
+                            gradient = Brush.linearGradient(listOf(AccentTeal, AccentBlue))
+                        )
+                    }
                 }
             }
         }
     }
     
     // Close Route Sheet
-    if (showCloseSheet && selectedRoute != null) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        val calendar = Calendar.getInstance()
-        val datePickerDialog = DatePickerDialog(
-            context,
-            { _, year, month, dayOfMonth ->
-                calendar.set(year, month, dayOfMonth)
-                closeDate = calendar.timeInMillis
-            },
-            calendar.get(Calendar.YEAR),
-            calendar.get(Calendar.MONTH),
-            calendar.get(Calendar.DAY_OF_MONTH)
-        )
-        
-        ModalBottomSheet(
-            onDismissRequest = { showCloseSheet = false },
-            sheetState = sheetState,
-            containerColor = Color.White,
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            dragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .background(Color(0xFFE0E0E0), RoundedCornerShape(2.dp))
-                )
-            }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 24.dp)
+    if (showCloseSheet) {
+        selectedRoute?.let { route ->
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            val calendar = Calendar.getInstance()
+            val datePickerDialog = DatePickerDialog(
+                context,
+                { _, year, month, dayOfMonth ->
+                    calendar.set(year, month, dayOfMonth)
+                    closeDate = calendar.timeInMillis
+                },
+                calendar.get(Calendar.YEAR),
+                calendar.get(Calendar.MONTH),
+                calendar.get(Calendar.DAY_OF_MONTH)
+            )
+            
+            ModalBottomSheet(
+                onDismissRequest = { showCloseSheet = false },
+                sheetState = sheetState,
+                containerColor = Color.White,
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                dragHandle = {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 12.dp)
+                            .width(40.dp)
+                            .height(4.dp)
+                            .background(Color(0xFFE0E0E0), RoundedCornerShape(2.dp))
+                    )
+                }
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    GradientIconBox(
-                        icon = Icons.Rounded.PowerSettingsNew,
-                        gradient = Brush.linearGradient(listOf(WarningAmber, ErrorRed))
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                    Text(
-                            "Close Route",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                            selectedRoute!!.routeName,
-                        style = MaterialTheme.typography.bodySmall,
-                            color = WarningAmber
-                        )
-                    }
-                }
-                
-                Spacer(Modifier.height(16.dp))
-                
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFFFEF3C7),
-                    shape = RoundedCornerShape(10.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 24.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("💡", fontSize = 16.sp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "History will be preserved. You can reopen later.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF92400E)
-                        )
-                    }
-                }
-                
-                Spacer(Modifier.height(16.dp))
-                
-                Surface(
-                    onClick = { datePickerDialog.show() },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFFF8F9FA),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Rounded.CalendarToday,
-                            contentDescription = null,
-                            tint = WarningAmber,
-                            modifier = Modifier.size(20.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        GradientIconBox(
+                            icon = Icons.Rounded.PowerSettingsNew,
+                            gradient = Brush.linearGradient(listOf(WarningAmber, ErrorRed))
                         )
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("Close Date", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                            Text(dateFormat.format(Date(closeDate)), fontWeight = FontWeight.Medium)
+                        Text(
+                                "Close Route",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                                route.routeName,
+                            style = MaterialTheme.typography.bodySmall,
+                                color = WarningAmber
+                            )
                         }
                     }
-                }
-                
-                Spacer(Modifier.height(12.dp))
-                
-                StyledTextField(
-                        value = closeReason,
-                        onValueChange = { closeReason = it },
-                    label = "Reason",
-                    placeholder = "Optional"
-                )
-                
-                Spacer(Modifier.height(20.dp))
-                
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = { showCloseSheet = false },
-                        modifier = Modifier.weight(1f),
+                    
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFFFEF3C7),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Cancel")
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("💡", fontSize = 16.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "History will be preserved. You can reopen later.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF92400E)
+                            )
+                        }
                     }
                     
-                Button(
-                        onClick = { viewModel.closeRoute(selectedRoute!!.id, closeDate, closeReason) },
+                    Spacer(Modifier.height(16.dp))
+                    
+                    Surface(
+                        onClick = { datePickerDialog.show() },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color(0xFFF8F9FA),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Rounded.CalendarToday,
+                                contentDescription = null,
+                                tint = WarningAmber,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("Close Date", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Text(dateFormat.format(Date(closeDate)), fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(12.dp))
+                    
+                    StyledTextField(
+                            value = closeReason,
+                            onValueChange = { closeReason = it },
+                        label = "Reason",
+                        placeholder = "Optional"
+                    )
+                    
+                    Spacer(Modifier.height(20.dp))
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(
+                            onClick = { showCloseSheet = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Cancel")
+                        }
+                        
+                    Button(
+                            onClick = { viewModel.closeRoute(route.id, closeDate, closeReason) },
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = WarningAmber
                         )
-                ) {
-                    Text("Close Route")
-                }
+                    ) {
+                        Text("Close Route")
+                    }
+                    }
                 }
             }
         }
     }
     
     // Delete Sheet
-    if (showDeleteSheet && selectedRoute != null) {
+    if (showDeleteSheet) {
+        selectedRoute?.let { route ->
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         
         ModalBottomSheet(
@@ -986,7 +997,7 @@ GradientButton(
                 Spacer(Modifier.height(4.dp))
                 
                     Text(
-                    selectedRoute!!.routeName,
+                    route.routeName,
                         style = MaterialTheme.typography.bodyMedium,
                     color = ErrorRed,
                     fontWeight = FontWeight.SemiBold
@@ -1022,15 +1033,16 @@ GradientButton(
                         Text("Cancel")
                     }
                     
-                Button(
-                    onClick = { viewModel.deleteRoute(selectedRoute!!.id) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
-                    ) {
-                        Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Delete")
+                    Button(
+                        onClick = { viewModel.deleteRoute(route.id) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = ErrorRed)
+                        ) {
+                            Icon(Icons.Rounded.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Delete")
+                        }
                     }
                 }
             }
@@ -1038,49 +1050,50 @@ GradientButton(
     }
     
     // Fee History Sheet
-    if (showFeeHistorySheet && selectedRoute != null) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        
-        ModalBottomSheet(
-            onDismissRequest = { showFeeHistorySheet = false },
-            sheetState = sheetState,
-            containerColor = Color.White,
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-            dragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(vertical = 12.dp)
-                        .width(40.dp)
-                        .height(4.dp)
-                        .background(Color(0xFFE0E0E0), RoundedCornerShape(2.dp))
-                )
-            }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 24.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    GradientIconBox(
-                        icon = Icons.Rounded.History,
-                        gradient = Brush.linearGradient(listOf(DeepPurple, SoftPurple))
+    if (showFeeHistorySheet) {
+        selectedRoute?.let { route ->
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            
+            ModalBottomSheet(
+                onDismissRequest = { showFeeHistorySheet = false },
+                sheetState = sheetState,
+                containerColor = Color.White,
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                dragHandle = {
+                    Box(
+                        modifier = Modifier
+                            .padding(vertical = 12.dp)
+                            .width(40.dp)
+                            .height(4.dp)
+                            .background(Color(0xFFE0E0E0), RoundedCornerShape(2.dp))
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                                        Text(
-                            "Fee History",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                            selectedRoute!!.routeName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = DeepPurple
-                        )
-                    }
                 }
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 24.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        GradientIconBox(
+                            icon = Icons.Rounded.History,
+                            gradient = Brush.linearGradient(listOf(DeepPurple, SoftPurple))
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                                            Text(
+                                "Fee History",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                route.routeName,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = DeepPurple
+                            )
+                        }
+                    }
                 
                 Spacer(Modifier.height(20.dp))
                 
@@ -1138,6 +1151,7 @@ GradientButton(
                 ) {
                     Text("Done")
                 }
+            }
             }
         }
     }

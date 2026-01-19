@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.outlined.ChatBubble
 import androidx.compose.material.icons.outlined.CurrencyRupee
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -228,33 +229,36 @@ fun TransportDuesScreen(
     }
     
     // Phone Selection Dialog
-    if (showPhoneDialog && selectedStudentForPhone != null && phoneActionType != null) {
-        PhoneSelectionDialog(
-            student = selectedStudentForPhone!!,
-            actionType = phoneActionType!!,
-            onPhoneSelected = { phone ->
-                showPhoneDialog = false
-                when (phoneActionType) {
-                    PhoneActionType.CALL -> {
-                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                            data = Uri.parse("tel:$phone")
+    if (showPhoneDialog) {
+        selectedStudentForPhone?.let { studentData ->
+            phoneActionType?.let { actionType ->
+                PhoneSelectionDialog(
+                    student = studentData,
+                    actionType = actionType,
+                    onPhoneSelected = { phone ->
+                        showPhoneDialog = false
+                        when (actionType) {
+                            PhoneActionType.CALL -> {
+                                val intent = Intent(Intent.ACTION_DIAL).apply {
+                                    data = Uri.parse("tel:$phone")
+                                }
+                                context.startActivity(intent)
+                            }
+                            PhoneActionType.WHATSAPP -> {
+                                openWhatsApp(context, phone, studentData)
+                            }
                         }
-                        context.startActivity(intent)
+                        selectedStudentForPhone = null
+                        phoneActionType = null
+                    },
+                    onDismiss = {
+                        showPhoneDialog = false
+                        selectedStudentForPhone = null
+                        phoneActionType = null
                     }
-                    PhoneActionType.WHATSAPP -> {
-                        openWhatsApp(context, phone, selectedStudentForPhone!!)
-                    }
-                    null -> {}
-                }
-                selectedStudentForPhone = null
-                phoneActionType = null
-            },
-            onDismiss = {
-                showPhoneDialog = false
-                selectedStudentForPhone = null
-                phoneActionType = null
+                )
             }
-        )
+        }
     }
 }
 
@@ -765,6 +769,31 @@ private fun MetricsDashboard(
                 progress = collectionRate,
                 modifier = Modifier.weight(1f)
             )
+        }
+        
+        // Explanatory note
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Rounded.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Dues shown include all fee types (tuition, transport, admission, etc.) for students enrolled in transport.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
