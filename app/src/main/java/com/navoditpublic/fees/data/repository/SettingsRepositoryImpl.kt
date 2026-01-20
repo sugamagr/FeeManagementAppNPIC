@@ -5,10 +5,12 @@ import com.navoditpublic.fees.data.local.FeesDatabase
 import com.navoditpublic.fees.data.local.dao.AcademicSessionDao
 import com.navoditpublic.fees.data.local.dao.ClassSectionDao
 import com.navoditpublic.fees.data.local.dao.SchoolSettingsDao
+import com.navoditpublic.fees.data.local.dao.SessionPromotionDao
 import com.navoditpublic.fees.data.local.dao.TransportRouteDao
 import com.navoditpublic.fees.data.local.entity.ClassSectionEntity
 import com.navoditpublic.fees.domain.model.AcademicSession
 import com.navoditpublic.fees.domain.model.SchoolSettings
+import com.navoditpublic.fees.domain.model.SessionPromotion
 import com.navoditpublic.fees.domain.model.TransportRoute
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +24,8 @@ class SettingsRepositoryImpl @Inject constructor(
     private val academicSessionDao: AcademicSessionDao,
     private val transportRouteDao: TransportRouteDao,
     private val schoolSettingsDao: SchoolSettingsDao,
-    private val classSectionDao: ClassSectionDao
+    private val classSectionDao: ClassSectionDao,
+    private val sessionPromotionDao: SessionPromotionDao
 ) : SettingsRepository {
     
     // Academic Sessions
@@ -189,6 +192,76 @@ class SettingsRepositoryImpl @Inject constructor(
         }
         // Actually delete the section from the database
         classSectionDao.deleteSection(className, sectionName)
+    }
+    
+    // ========== Session Promotion Methods ==========
+    
+    override suspend fun saveSessionPromotion(promotion: SessionPromotion): Result<Long> = runCatching {
+        sessionPromotionDao.insert(promotion.toEntity())
+    }
+    
+    override suspend fun getPromotionForSession(targetSessionId: Long): SessionPromotion? {
+        return sessionPromotionDao.getPromotionForTargetSession(targetSessionId)?.let {
+            SessionPromotion.fromEntity(it)
+        }
+    }
+    
+    override suspend fun wasSessionPromoted(targetSessionId: Long): Boolean {
+        return sessionPromotionDao.wasSessionPromoted(targetSessionId)
+    }
+    
+    override suspend fun markPromotionAsReverted(promotionId: Long, reason: String?): Result<Unit> = runCatching {
+        sessionPromotionDao.markAsReverted(promotionId, System.currentTimeMillis(), reason)
+    }
+    
+    override fun getPromotionForSessionFlow(targetSessionId: Long): Flow<SessionPromotion?> {
+        return sessionPromotionDao.getPromotionForTargetSessionFlow(targetSessionId).map { entity ->
+            entity?.let { SessionPromotion.fromEntity(it) }
+        }
+    }
+    
+    // ========== Session Access Level Methods ==========
+    
+    override suspend fun getTargetSessionFromSource(sourceSessionId: Long): AcademicSession? {
+        // Find a promotion where this session was the source
+        val promotion = sessionPromotionDao.getPromotionForSourceSession(sourceSessionId)
+        return promotion?.let {
+            academicSessionDao.getById(it.targetSessionId)?.let { entity ->
+                AcademicSession.fromEntity(entity)
+            }
+        }
+    }
+    
+    override suspend fun getPreviousSession(): AcademicSession? {
+        val currentSession = getCurrentSession() ?: return null
+        
+        // Check if current session was created via promotion
+        val promotion = sessionPromotionDao.getPromotionForTargetSession(currentSession.id)
+        return promotion?.let {
+            academicSessionDao.getById(it.sourceSessionId)?.let { entity ->
+                AcademicSession.fromEntity(entity)
+            }
+        }
+    }
+    
+    override suspend fun isPreviousSession(sessionId: Long): Boolean {
+        val currentSession = getCurrentSession() ?: return false
+        if (sessionId == currentSession.id) return false
+        
+        // Check if current session was promoted from this session
+        val promotion = sessionPromotionDao.getPromotionForTargetSession(currentSession.id)
+        return promotion?.sourceSessionId == sessionId
+    }
+    
+    override suspend fun isReadOnlySession(sessionId: Long): Boolean {
+        val currentSession = getCurrentSession() ?: return false
+        if (sessionId == currentSession.id) return false
+        
+        // Check if it's the previous session
+        if (isPreviousSession(sessionId)) return false
+        
+        // All other sessions are read-only
+        return true
     }
 }
 

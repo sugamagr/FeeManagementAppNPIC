@@ -3,9 +3,18 @@ package com.navoditpublic.fees.presentation.screens.settings.sessions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.domain.model.AcademicSession
+import com.navoditpublic.fees.domain.model.PromotionOptions
+import com.navoditpublic.fees.domain.model.PromotionPreview
+import com.navoditpublic.fees.domain.model.PromotionProgress
+import com.navoditpublic.fees.domain.model.PromotionResult
+import com.navoditpublic.fees.domain.model.RevertResult
+import com.navoditpublic.fees.domain.model.RevertSafetyCheck
+import com.navoditpublic.fees.domain.model.SessionPromotion
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.domain.usecase.RevertSessionPromotionUseCase
+import com.navoditpublic.fees.domain.usecase.SessionPromotionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,39 +45,48 @@ data class AcademicSessionsState(
     val sessions: List<AcademicSession> = emptyList(),
     val inactiveSessions: List<AcademicSession> = emptyList(),
     val sessionStats: Map<Long, SessionStats> = emptyMap(),
+    val sessionPromotions: Map<Long, SessionPromotion> = emptyMap(), // Keyed by target session ID
     val error: String? = null,
     
     // Search & Filter
     val searchQuery: String = "",
     val filteredSessions: List<AcademicSession> = emptyList(),
     
-    // For fee addition dialog
-    val showAddFeesDialog: Boolean = false,
-    val newSessionId: Long? = null,
-    val newSessionName: String = "",
-    val isAddingFees: Boolean = false,
-    
-    // For showing inactive sessions
-    val showInactiveSessions: Boolean = false,
-    
-    // For duplicate dialog
-    val sessionToDuplicate: AcademicSession? = null,
-    
     // Animation trigger
-    val animateItems: Boolean = false
+    val animateItems: Boolean = false,
+    
+    // Session Promotion
+    val showPromotionWizard: Boolean = false,
+    val sourceSessionId: Long? = null,
+    val targetSessionId: Long? = null,
+    val promotionPreview: PromotionPreview? = null,
+    val promotionProgress: PromotionProgress? = null,
+    val promotionResult: PromotionResult? = null,
+    val isPromoting: Boolean = false,
+    
+    // Session Revert
+    val showRevertDialog: Boolean = false,
+    val promotionToRevert: SessionPromotion? = null,
+    val revertSafetyCheck: RevertSafetyCheck? = null,
+    val revertProgress: PromotionProgress? = null,
+    val revertResult: RevertResult? = null,
+    val isReverting: Boolean = false
 )
 
 sealed class SessionEvent {
     data class Success(val message: String) : SessionEvent()
     data class Error(val message: String) : SessionEvent()
-    data class FeesAdded(val studentCount: Int, val totalFees: Double) : SessionEvent()
+    data class PromotionComplete(val result: PromotionResult) : SessionEvent()
+    data class RevertComplete(val result: RevertResult) : SessionEvent()
 }
 
 @HiltViewModel
 class AcademicSessionsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val feeRepository: FeeRepository,
-    private val studentRepository: StudentRepository
+    private val studentRepository: StudentRepository,
+    private val sessionPromotionUseCase: SessionPromotionUseCase,
+    private val revertSessionPromotionUseCase: RevertSessionPromotionUseCase
 ) : ViewModel() {
     
     private val _state = MutableStateFlow(AcademicSessionsState())
@@ -101,6 +119,14 @@ class AcademicSessionsViewModel @Inject constructor(
                     }
                 }
                 
+                // Load promotions for all sessions
+                val promotions = mutableMapOf<Long, SessionPromotion>()
+                allSessions.forEach { session ->
+                    settingsRepository.getPromotionForSession(session.id)?.let {
+                        promotions[session.id] = it
+                    }
+                }
+                
                 _state.value = _state.value.copy(
                     isLoading = false,
                     isRefreshing = false,
@@ -108,6 +134,7 @@ class AcademicSessionsViewModel @Inject constructor(
                     filteredSessions = filtered,
                     inactiveSessions = inactiveSessions,
                     sessionStats = statsMap,
+                    sessionPromotions = promotions,
                     animateItems = true
                 )
             }
@@ -169,84 +196,24 @@ class AcademicSessionsViewModel @Inject constructor(
         )
     }
     
-    fun toggleShowInactiveSessions() {
-        _state.value = _state.value.copy(
-            showInactiveSessions = !_state.value.showInactiveSessions
-        )
-    }
-    
-    fun showDuplicateDialog(session: AcademicSession) {
-        _state.value = _state.value.copy(sessionToDuplicate = session)
-    }
-    
-    fun dismissDuplicateDialog() {
-        _state.value = _state.value.copy(sessionToDuplicate = null)
-    }
-    
-    fun duplicateSession(sourceSession: AcademicSession, newSessionName: String) {
+    /**
+     * Add the first session. This is only used when no sessions exist.
+     * After the first session, new sessions are created through migration.
+     */
+    fun addFirstSession(sessionName: String) {
         viewModelScope.launch {
             try {
-                // Validate format
-                val regex = Regex("^\\d{4}-\\d{2}$")
-                if (!regex.matches(newSessionName)) {
-                    _events.emit(SessionEvent.Error("Invalid format. Use: 2025-26"))
+                // Check if active sessions already exist - only allow if no active sessions
+                // (inactive sessions from legacy data are ignored)
+                if (_state.value.sessions.isNotEmpty()) {
+                    _events.emit(SessionEvent.Error("Active sessions already exist. Use migration to create new sessions."))
                     return@launch
                 }
                 
-                // Check if exists
-                if (settingsRepository.sessionNameExists(newSessionName)) {
-                    _events.emit(SessionEvent.Error("Session already exists"))
-                    return@launch
-                }
-                
-                // Parse years and create new session
-                val parts = newSessionName.split("-")
-                val startYear = parts[0].toInt()
-                val endYear = startYear + 1
-                
-                val startCal = Calendar.getInstance().apply {
-                    set(startYear, Calendar.APRIL, 1, 0, 0, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                
-                val endCal = Calendar.getInstance().apply {
-                    set(endYear, Calendar.MARCH, 31, 23, 59, 59)
-                    set(Calendar.MILLISECOND, 999)
-                }
-                
-                val newSession = AcademicSession(
-                    sessionName = newSessionName,
-                    startDate = startCal.timeInMillis,
-                    endDate = endCal.timeInMillis,
-                    isCurrent = false
-                )
-                
-                settingsRepository.insertSession(newSession).onSuccess { newSessionId ->
-                    _state.value = _state.value.copy(sessionToDuplicate = null)
-                    _events.emit(SessionEvent.Success("Session duplicated: $newSessionName"))
-                    
-                    // Show fees dialog for the new session
-                    _state.value = _state.value.copy(
-                        showAddFeesDialog = true,
-                        newSessionId = newSessionId,
-                        newSessionName = newSessionName
-                    )
-                }.onFailure { e ->
-                    _events.emit(SessionEvent.Error(e.message ?: "Failed to duplicate session"))
-                }
-            } catch (e: Exception) {
-                _events.emit(SessionEvent.Error(e.message ?: "Invalid session format"))
-            }
-        }
-    }
-    
-    fun addSession(sessionName: String) {
-        viewModelScope.launch {
-            try {
-                // Validate format (e.g., "2025-26")
+                // Validate format (e.g., "2024-25")
                 val regex = Regex("^\\d{4}-\\d{2}$")
                 if (!regex.matches(sessionName)) {
-                    _events.emit(SessionEvent.Error("Invalid format. Use: 2025-26"))
+                    _events.emit(SessionEvent.Error("Invalid format. Use: 2024-25"))
                     return@launch
                 }
                 
@@ -276,56 +243,16 @@ class AcademicSessionsViewModel @Inject constructor(
                     sessionName = sessionName,
                     startDate = startCal.timeInMillis,
                     endDate = endCal.timeInMillis,
-                    isCurrent = _state.value.sessions.isEmpty() // Make current if first
+                    isCurrent = true // First session is always current
                 )
                 
-                settingsRepository.insertSession(session).onSuccess { newSessionId ->
-                    _events.emit(SessionEvent.Success("Session added"))
-                    
-                    // Show dialog to ask about adding fees for all students
-                    _state.value = _state.value.copy(
-                        showAddFeesDialog = true,
-                        newSessionId = newSessionId,
-                        newSessionName = sessionName
-                    )
+                settingsRepository.insertSession(session).onSuccess {
+                    _events.emit(SessionEvent.Success("First session created: $sessionName"))
                 }.onFailure { e ->
-                    _events.emit(SessionEvent.Error(e.message ?: "Failed to add session"))
+                    _events.emit(SessionEvent.Error(e.message ?: "Failed to create session"))
                 }
             } catch (e: Exception) {
                 _events.emit(SessionEvent.Error(e.message ?: "Invalid session format"))
-            }
-        }
-    }
-    
-    fun dismissAddFeesDialog() {
-        _state.value = _state.value.copy(
-            showAddFeesDialog = false,
-            newSessionId = null,
-            newSessionName = ""
-        )
-    }
-    
-    fun addFeesForAllStudents(addTuition: Boolean, addTransport: Boolean) {
-        viewModelScope.launch {
-            val sessionId = _state.value.newSessionId ?: return@launch
-            
-            _state.value = _state.value.copy(isAddingFees = true)
-            
-            feeRepository.addSessionFeesForAllStudents(
-                sessionId = sessionId,
-                addTuition = addTuition,
-                addTransport = addTransport
-            ).onSuccess { (studentCount, totalFees) ->
-                _state.value = _state.value.copy(
-                    isAddingFees = false,
-                    showAddFeesDialog = false,
-                    newSessionId = null,
-                    newSessionName = ""
-                )
-                _events.emit(SessionEvent.FeesAdded(studentCount, totalFees))
-            }.onFailure { e ->
-                _state.value = _state.value.copy(isAddingFees = false)
-                _events.emit(SessionEvent.Error(e.message ?: "Failed to add fees"))
             }
         }
     }
@@ -340,47 +267,243 @@ class AcademicSessionsViewModel @Inject constructor(
         }
     }
     
-    fun deactivateSession(sessionId: Long) {
+    // ========== Session Promotion Methods ==========
+    
+    /**
+     * Open promotion wizard with source and target session.
+     * Called when user wants to promote from one session to another.
+     */
+    fun openPromotionWizard(sourceSession: AcademicSession, targetSession: AcademicSession) {
         viewModelScope.launch {
-            // Check if it's the current session
-            val session = _state.value.sessions.find { it.id == sessionId }
-            if (session?.isCurrent == true) {
-                _events.emit(SessionEvent.Error("Cannot deactivate current session. Set another session as current first."))
-                return@launch
-            }
+            _state.value = _state.value.copy(
+                showPromotionWizard = true,
+                sourceSessionId = sourceSession.id,
+                targetSessionId = targetSession.id,
+                promotionPreview = null,
+                promotionProgress = null,
+                promotionResult = null,
+                isPromoting = false
+            )
             
-            settingsRepository.setSessionActive(sessionId, false).onSuccess {
-                _events.emit(SessionEvent.Success("Session moved to inactive"))
-            }.onFailure { e ->
-                _events.emit(SessionEvent.Error(e.message ?: "Failed to deactivate"))
+            // Load preview data
+            loadPromotionPreview(sourceSession.id)
+        }
+    }
+    
+    /**
+     * Open promotion wizard to create and promote to a new session.
+     */
+    fun startPromotionToNewSession(sourceSession: AcademicSession) {
+        viewModelScope.launch {
+            // Auto-generate next session name (e.g., 2024-25 -> 2025-26)
+            val parts = sourceSession.sessionName.split("-")
+            if (parts.size == 2) {
+                try {
+                    val startYear = parts[0].toInt() + 1
+                    val endYearSuffix = "%02d".format((startYear + 1) % 100)
+                    val newSessionName = "$startYear-$endYearSuffix"
+                    
+                    // Check if session already exists
+                    if (settingsRepository.sessionNameExists(newSessionName)) {
+                        // If exists, find it and open wizard with it
+                        val sessions = settingsRepository.getAllSessions().first()
+                        val targetSession = sessions.find { it.sessionName == newSessionName }
+                        if (targetSession != null) {
+                            openPromotionWizard(sourceSession, targetSession)
+                        } else {
+                            _events.emit(SessionEvent.Error("Session $newSessionName exists but couldn't be found"))
+                        }
+                        return@launch
+                    }
+                    
+                    // Create dates (April 1 to March 31)
+                    val startCal = Calendar.getInstance().apply {
+                        set(startYear, Calendar.APRIL, 1, 0, 0, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    
+                    val endCal = Calendar.getInstance().apply {
+                        set(startYear + 1, Calendar.MARCH, 31, 23, 59, 59)
+                        set(Calendar.MILLISECOND, 999)
+                    }
+                    
+                    val newSession = AcademicSession(
+                        sessionName = newSessionName,
+                        startDate = startCal.timeInMillis,
+                        endDate = endCal.timeInMillis,
+                        isCurrent = false
+                    )
+                    
+                    settingsRepository.insertSession(newSession).onSuccess { newSessionId ->
+                        // Open wizard with the new session
+                        val targetSession = newSession.copy(id = newSessionId)
+                        _state.value = _state.value.copy(
+                            showPromotionWizard = true,
+                            sourceSessionId = sourceSession.id,
+                            targetSessionId = newSessionId,
+                            promotionPreview = null,
+                            promotionProgress = null,
+                            promotionResult = null,
+                            isPromoting = false
+                        )
+                        loadPromotionPreview(sourceSession.id)
+                    }.onFailure { e ->
+                        _events.emit(SessionEvent.Error(e.message ?: "Failed to create new session"))
+                    }
+                } catch (e: Exception) {
+                    _events.emit(SessionEvent.Error("Could not parse session name"))
+                }
             }
         }
     }
     
-    fun reactivateSession(sessionId: Long) {
+    private suspend fun loadPromotionPreview(sourceSessionId: Long) {
+        try {
+            val preview = sessionPromotionUseCase.getPromotionPreview(sourceSessionId)
+            _state.value = _state.value.copy(promotionPreview = preview)
+        } catch (e: Exception) {
+            _events.emit(SessionEvent.Error("Failed to load preview: ${e.message}"))
+        }
+    }
+    
+    fun dismissPromotionWizard() {
+        _state.value = _state.value.copy(
+            showPromotionWizard = false,
+            sourceSessionId = null,
+            targetSessionId = null,
+            promotionPreview = null,
+            promotionProgress = null,
+            promotionResult = null,
+            isPromoting = false
+        )
+    }
+    
+    fun executePromotion(options: PromotionOptions) {
         viewModelScope.launch {
-            settingsRepository.setSessionActive(sessionId, true).onSuccess {
-                _events.emit(SessionEvent.Success("Session reactivated"))
+            val sourceId = _state.value.sourceSessionId ?: return@launch
+            val targetId = _state.value.targetSessionId ?: return@launch
+            
+            _state.value = _state.value.copy(isPromoting = true)
+            
+            sessionPromotionUseCase.execute(
+                sourceSessionId = sourceId,
+                targetSessionId = targetId,
+                options = options,
+                onProgress = { progress ->
+                    // Ensure state update happens on main thread
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        _state.value = _state.value.copy(promotionProgress = progress)
+                    }
+                }
+            ).onSuccess { result ->
+                _state.value = _state.value.copy(
+                    isPromoting = false,
+                    promotionResult = result
+                )
+                _events.emit(SessionEvent.PromotionComplete(result))
             }.onFailure { e ->
-                _events.emit(SessionEvent.Error(e.message ?: "Failed to reactivate"))
+                // Preserve the progress percentage to show user how far we got
+                val lastProgress = _state.value.promotionProgress?.percentComplete ?: 0
+                _state.value = _state.value.copy(
+                    isPromoting = false,
+                    promotionProgress = PromotionProgress(
+                        currentStep = "Failed",
+                        percentComplete = lastProgress,
+                        error = e.message ?: "An unexpected error occurred"
+                    )
+                )
+                _events.emit(SessionEvent.Error("Promotion failed: ${e.message}"))
             }
         }
     }
     
-    fun permanentlyDeleteSession(sessionId: Long) {
+    // ========== Session Revert Methods ==========
+    
+    /**
+     * Open revert dialog for a session that was created via promotion.
+     */
+    fun openRevertDialog(session: AcademicSession) {
         viewModelScope.launch {
-            // Only allow deletion of inactive sessions
-            val session = _state.value.inactiveSessions.find { it.id == sessionId }
-            if (session == null) {
-                _events.emit(SessionEvent.Error("Only inactive sessions can be permanently deleted"))
+            val promotion = settingsRepository.getPromotionForSession(session.id)
+            if (promotion == null) {
+                _events.emit(SessionEvent.Error("This session was not created via promotion"))
                 return@launch
             }
             
-            settingsRepository.deleteSession(sessionId).onSuccess {
-                _events.emit(SessionEvent.Success("Session permanently deleted"))
+            _state.value = _state.value.copy(
+                showRevertDialog = true,
+                promotionToRevert = promotion,
+                revertSafetyCheck = null,
+                revertProgress = null,
+                revertResult = null,
+                isReverting = false
+            )
+            
+            // Check safety
+            loadRevertSafetyCheck(promotion)
+        }
+    }
+    
+    private suspend fun loadRevertSafetyCheck(promotion: SessionPromotion) {
+        try {
+            val safetyCheck = revertSessionPromotionUseCase.checkRevertSafety(promotion)
+            _state.value = _state.value.copy(revertSafetyCheck = safetyCheck)
+        } catch (e: Exception) {
+            _events.emit(SessionEvent.Error("Failed to check safety: ${e.message}"))
+        }
+    }
+    
+    fun dismissRevertDialog() {
+        _state.value = _state.value.copy(
+            showRevertDialog = false,
+            promotionToRevert = null,
+            revertSafetyCheck = null,
+            revertProgress = null,
+            revertResult = null,
+            isReverting = false
+        )
+    }
+    
+    fun executeRevert(forceDelete: Boolean, reason: String?) {
+        viewModelScope.launch {
+            val promotion = _state.value.promotionToRevert ?: return@launch
+            
+            _state.value = _state.value.copy(isReverting = true)
+            
+            revertSessionPromotionUseCase.execute(
+                promotion = promotion,
+                forceDelete = forceDelete,
+                reason = reason,
+                onProgress = { progress ->
+                    // Ensure state update happens on main thread
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        _state.value = _state.value.copy(revertProgress = progress)
+                    }
+                }
+            ).onSuccess { result ->
+                _state.value = _state.value.copy(
+                    isReverting = false,
+                    revertResult = result
+                )
+                _events.emit(SessionEvent.RevertComplete(result))
             }.onFailure { e ->
-                _events.emit(SessionEvent.Error(e.message ?: "Failed to delete"))
+                _state.value = _state.value.copy(
+                    isReverting = false,
+                    revertProgress = PromotionProgress(
+                        currentStep = "Error",
+                        percentComplete = 0,
+                        error = e.message
+                    )
+                )
+                _events.emit(SessionEvent.Error("Revert failed: ${e.message}"))
             }
         }
+    }
+    
+    /**
+     * Check if a session was promoted and can be reverted.
+     */
+    fun getPromotionForSession(sessionId: Long): SessionPromotion? {
+        return _state.value.sessionPromotions[sessionId]
     }
 }

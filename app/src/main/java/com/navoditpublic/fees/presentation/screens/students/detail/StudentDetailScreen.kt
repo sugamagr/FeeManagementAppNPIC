@@ -2,6 +2,7 @@ package com.navoditpublic.fees.presentation.screens.students.detail
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -33,29 +34,42 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Payment
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,12 +92,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.navoditpublic.fees.presentation.components.LoadingScreen
 import com.navoditpublic.fees.presentation.navigation.Screen
+import com.navoditpublic.fees.presentation.theme.ErrorRed
 import com.navoditpublic.fees.presentation.theme.PaidChipBackground
 import com.navoditpublic.fees.presentation.theme.PaidChipText
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronDark
+import com.navoditpublic.fees.presentation.theme.SuccessGreen
 import com.navoditpublic.fees.util.DateUtils
 import com.navoditpublic.fees.util.toRupees
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,6 +112,52 @@ fun StudentDetailScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    var showMenu by remember { mutableStateOf(false) }
+    
+    // Handle events
+    LaunchedEffect(Unit) {
+        viewModel.events.collectLatest { event ->
+            when (event) {
+                is StudentDetailEvent.StudentDeleted -> {
+                    navController.popBackStack()
+                }
+                is StudentDetailEvent.ShowToast -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+    
+    // Dialogs
+    if (state.showInactiveDialog) {
+        MarkInactiveDialog(
+            studentName = state.student?.name ?: "",
+            onConfirm = viewModel::markInactive,
+            onDismiss = viewModel::dismissInactiveDialog
+        )
+    }
+    
+    if (state.showReactivateDialog) {
+        ReactivateDialog(
+            studentName = state.student?.name ?: "",
+            onConfirm = viewModel::reactivate,
+            onDismiss = viewModel::dismissReactivateDialog
+        )
+    }
+    
+    if (state.showDeleteDialog) {
+        DeleteStudentDialog(
+            studentName = state.student?.name ?: "",
+            onConfirm = viewModel::deleteStudent,
+            onDismiss = viewModel::dismissDeleteDialog
+        )
+    }
+    
+    if (state.showCannotDeleteDialog) {
+        CannotDeleteDialog(
+            onDismiss = viewModel::dismissCannotDeleteDialog
+        )
+    }
     
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
@@ -165,14 +228,95 @@ fun StudentDetailScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.White
                             )
-                            IconButton(onClick = { 
-                                navController.navigate(Screen.AddEditStudent.createRoute(studentId))
-                            }) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Edit",
-                                    tint = Color.White
-                                )
+                            Row {
+                                IconButton(onClick = { 
+                                    navController.navigate(Screen.AddEditStudent.createRoute(studentId))
+                                }) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit",
+                                        tint = Color.White
+                                    )
+                                }
+                                
+                                Box {
+                                    IconButton(onClick = { showMenu = true }) {
+                                        Icon(
+                                            Icons.Default.MoreVert,
+                                            contentDescription = "More options",
+                                            tint = Color.White
+                                        )
+                                    }
+                                    
+                                    DropdownMenu(
+                                        expanded = showMenu,
+                                        onDismissRequest = { showMenu = false }
+                                    ) {
+                                        // Mark Inactive / Reactivate option
+                                        if (student.isActive) {
+                                            DropdownMenuItem(
+                                                text = { 
+                                                    Text(
+                                                        "Mark as Inactive",
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    ) 
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.Default.PersonOff,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                },
+                                                onClick = {
+                                                    showMenu = false
+                                                    viewModel.showInactiveDialog()
+                                                }
+                                            )
+                                        } else {
+                                            DropdownMenuItem(
+                                                text = { 
+                                                    Text(
+                                                        "Reactivate",
+                                                        color = SuccessGreen
+                                                    ) 
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.Default.PersonAdd,
+                                                        contentDescription = null,
+                                                        tint = SuccessGreen
+                                                    )
+                                                },
+                                                onClick = {
+                                                    showMenu = false
+                                                    viewModel.showReactivateDialog()
+                                                }
+                                            )
+                                        }
+                                        
+                                        // Delete option
+                                        DropdownMenuItem(
+                                            text = { 
+                                                Text(
+                                                    "Delete Student",
+                                                    color = if (state.canDelete) ErrorRed else Color.Gray
+                                                ) 
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = null,
+                                                    tint = if (state.canDelete) ErrorRed else Color.Gray
+                                                )
+                                            },
+                                            onClick = {
+                                                showMenu = false
+                                                viewModel.showDeleteDialog()
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1319,4 +1463,266 @@ private fun QuickActionItem(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
+}
+
+// ==================== Status Management Dialogs ====================
+
+@Composable
+private fun MarkInactiveDialog(
+    studentName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.PersonOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                "Mark as Inactive?",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "Are you sure you want to mark $studentName as inactive?",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "They will no longer appear in:",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "• Fee collection search\n• Reports and statistics\n• Session promotions",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Their data will be preserved and they can be reactivated later.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary
+                )
+            ) {
+                Text("Mark Inactive")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ReactivateDialog(
+    studentName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.PersonAdd,
+                contentDescription = null,
+                tint = SuccessGreen,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                "Reactivate Student?",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "Are you sure you want to reactivate $studentName?",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "They will appear in active student lists again and can be included in fee collection and reports.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SuccessGreen
+                )
+            ) {
+                Text("Reactivate")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DeleteStudentDialog(
+    studentName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(ErrorRed.copy(alpha = 0.1f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = ErrorRed,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        },
+        title = {
+            Text(
+                "Permanently Delete?",
+                fontWeight = FontWeight.Bold,
+                color = ErrorRed
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "This will permanently delete $studentName and all their data.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    color = ErrorRed.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = ErrorRed,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "This action CANNOT be undone!",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ErrorRed
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Their SR number and account number will become available for reuse.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ErrorRed
+                )
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text("Delete Forever")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CannotDeleteDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Default.Warning,
+                contentDescription = null,
+                tint = Color(0xFFFF9800),
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                "Cannot Delete",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "This student has financial records (fees charged or payments received).",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Students with financial history cannot be permanently deleted to preserve data integrity.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "You can mark them as inactive instead.",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
 }

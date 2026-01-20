@@ -162,6 +162,65 @@ interface ReceiptDao {
         AND is_cancelled = 0
     """)
     suspend fun getPaymentsCount(studentId: Long, sessionId: Long): Int
+    
+    // ========== Session Promotion Methods ==========
+    
+    /**
+     * Get count of receipts in a session (for revert safety check)
+     */
+    @Query("""
+        SELECT COUNT(*) FROM receipts 
+        WHERE session_id = :sessionId 
+        AND is_cancelled = 0
+    """)
+    suspend fun getReceiptCountForSession(sessionId: Long): Int
+    
+    /**
+     * Get total amount collected in a session (for revert safety check)
+     */
+    @Query("""
+        SELECT COALESCE(SUM(net_amount), 0.0) FROM receipts 
+        WHERE session_id = :sessionId 
+        AND is_cancelled = 0
+    """)
+    suspend fun getTotalCollectionForSession(sessionId: Long): Double
+    
+    /**
+     * Get all receipts in a session (for revert warning display)
+     */
+    @Query("""
+        SELECT * FROM receipts 
+        WHERE session_id = :sessionId 
+        AND is_cancelled = 0 
+        ORDER BY receipt_date DESC
+        LIMIT :limit
+    """)
+    suspend fun getReceiptsForSessionPreview(sessionId: Long, limit: Int = 10): List<ReceiptEntity>
+    
+    /**
+     * Delete all receipts in a session (for forced revert)
+     * WARNING: This permanently deletes receipts!
+     */
+    @Query("DELETE FROM receipts WHERE session_id = :sessionId")
+    suspend fun deleteReceiptsForSession(sessionId: Long): Int
+    
+    /**
+     * Delete receipt items for a session (for forced revert)
+     */
+    @Query("""
+        DELETE FROM receipt_items 
+        WHERE receipt_id IN (SELECT id FROM receipts WHERE session_id = :sessionId)
+    """)
+    suspend fun deleteReceiptItemsForSession(sessionId: Long): Int
+    
+    // ========== Student Deletion Checks ==========
+    
+    /**
+     * Check if a student has any receipts.
+     * Used to determine if a student can be permanently deleted.
+     */
+    @Query("SELECT EXISTS(SELECT 1 FROM receipts WHERE student_id = :studentId)")
+    suspend fun hasReceiptsForStudent(studentId: Long): Boolean
 }
 
 

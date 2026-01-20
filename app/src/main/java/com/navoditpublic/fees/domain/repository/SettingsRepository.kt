@@ -79,6 +79,57 @@ interface SettingsRepository {
     suspend fun addSection(className: String, sectionName: String): Result<Long>
     
     suspend fun removeSection(className: String, sectionName: String): Result<Unit>
+    
+    // ========== Session Promotion Methods ==========
+    
+    /**
+     * Save a session promotion record
+     */
+    suspend fun saveSessionPromotion(promotion: com.navoditpublic.fees.domain.model.SessionPromotion): Result<Long>
+    
+    /**
+     * Get promotion record for a target session
+     */
+    suspend fun getPromotionForSession(targetSessionId: Long): com.navoditpublic.fees.domain.model.SessionPromotion?
+    
+    /**
+     * Check if a session was created via promotion
+     */
+    suspend fun wasSessionPromoted(targetSessionId: Long): Boolean
+    
+    /**
+     * Mark a promotion as reverted
+     */
+    suspend fun markPromotionAsReverted(promotionId: Long, reason: String?): Result<Unit>
+    
+    /**
+     * Get promotion record for a target session as Flow
+     */
+    fun getPromotionForSessionFlow(targetSessionId: Long): Flow<com.navoditpublic.fees.domain.model.SessionPromotion?>
+    
+    // ========== Session Access Level Methods ==========
+    
+    /**
+     * Get the session that was created from this source session (via migration).
+     * Returns null if this session was never migrated to another session.
+     */
+    suspend fun getTargetSessionFromSource(sourceSessionId: Long): AcademicSession?
+    
+    /**
+     * Get the previous session (the session that was migrated to create the current session).
+     * Returns null if current session was not created via migration.
+     */
+    suspend fun getPreviousSession(): AcademicSession?
+    
+    /**
+     * Check if a session is the "previous" session (immediate source of current session).
+     */
+    suspend fun isPreviousSession(sessionId: Long): Boolean
+    
+    /**
+     * Check if a session is "read-only" (older than previous session).
+     */
+    suspend fun isReadOnlySession(sessionId: Long): Boolean
 }
 
 

@@ -223,6 +223,13 @@ fun CollectFeeScreen(
                 is CollectFeeEvent.Error -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
                 }
+                is CollectFeeEvent.BalanceAdjusted -> {
+                    Toast.makeText(
+                        context, 
+                        "Opening balance adjusted to ₹${String.format("%.0f", event.newBalance)}", 
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
     }
@@ -279,6 +286,56 @@ fun CollectFeeScreen(
                 TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
             }
         ) { DatePicker(state = datePickerState) }
+    }
+    
+    // Session Warning Dialog (Previous Session)
+    if (state.showSessionWarning) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissSessionWarning() },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = Color.White,
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFFF3E0)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9800),
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            },
+            title = {
+                Text(
+                    "Previous Session",
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Text(
+                    text = "You are adding a receipt to a previous session. The opening balance in the current session will be automatically adjusted to maintain consistency.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = Color.Gray
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.dismissSessionWarning() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Saffron),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("I Understand", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
     }
     
     // Student Selection Sheet

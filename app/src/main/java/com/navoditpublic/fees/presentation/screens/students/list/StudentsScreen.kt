@@ -55,6 +55,8 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,9 +65,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Backpack
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChildCare
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Draw
@@ -79,6 +83,7 @@ import androidx.compose.material.icons.filled.HistoryEdu
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Payment
+import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Science
@@ -183,6 +188,7 @@ fun StudentsScreen(
                 // Premium Curved Header with Search
                 PremiumHeader(
                     totalStudents = state.totalStudentCount,
+                    inactiveStudents = state.inactiveStudentCount,
                     searchQuery = state.searchQuery,
                     onSearchChange = viewModel::onSearchQueryChange,
                     onMenuClick = { scope.launch { drawerState.open() } },
@@ -248,7 +254,8 @@ fun StudentsScreen(
                                 key = "all_students"
                             ) {
                                 PremiumAllStudentsCard(
-                                    totalStudents = state.totalStudentCount,
+                                    activeStudents = state.totalStudentCount - state.inactiveStudentCount,
+                                    inactiveStudents = state.inactiveStudentCount,
                                     totalDues = state.totalDues,
                                     classCount = state.classSummaries.size,
                                     onClick = {
@@ -281,6 +288,23 @@ fun StudentsScreen(
                                     }
                                 )
                             }
+                            
+                            // Inactive Students Card - spans full width, shown after class cards
+                            if (state.inactiveStudentCount > 0) {
+                                item(
+                                    span = { GridItemSpan(2) },
+                                    key = "inactive_students"
+                                ) {
+                                    InactiveStudentsCard(
+                                        inactiveCount = state.inactiveStudentCount,
+                                        onClick = {
+                                            navController.navigate(
+                                                Screen.StudentListByClass.createRoute("INACTIVE", "ALL")
+                                            )
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -312,6 +336,7 @@ fun StudentsScreen(
 @Composable
 private fun PremiumHeader(
     totalStudents: Int,
+    inactiveStudents: Int = 0,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
     onMenuClick: () -> Unit,
@@ -403,7 +428,7 @@ private fun PremiumHeader(
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            "$animatedCount total",
+                            if (inactiveStudents > 0) "$animatedCount total ($inactiveStudents inactive)" else "$animatedCount total",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f),
                             fontWeight = FontWeight.Medium
@@ -469,16 +494,17 @@ private fun PremiumHeader(
 
 @Composable
 private fun PremiumAllStudentsCard(
-    totalStudents: Int,
+    activeStudents: Int,
+    inactiveStudents: Int,
     totalDues: Double,
     classCount: Int,
     onClick: () -> Unit
 ) {
     // Animated values
-    val animatedStudentCount by animateIntAsState(
-        targetValue = totalStudents,
+    val animatedActiveCount by animateIntAsState(
+        targetValue = activeStudents,
         animationSpec = tween(1000, easing = FastOutSlowInEasing),
-        label = "students"
+        label = "activeStudents"
     )
     
     // Press animation
@@ -631,33 +657,171 @@ private fun PremiumAllStudentsCard(
                                     color = Color.White.copy(alpha = 0.9f)
                                 )
                             }
+                            if (totalDues > 0) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = HeroCardAccent
+                                ) {
+                                    Text(
+                                        totalDues.toRupees(),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
                 }
                 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "$animatedStudentCount",
-                        style = MaterialTheme.typography.displaySmall,
+                        "$animatedActiveCount",
+                        style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         letterSpacing = (-1).sp
                     )
-                    if (totalDues > 0) {
-                        Spacer(Modifier.height(4.dp))
-                            Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = HeroCardAccent
-                        ) {
+                    Text(
+                        if (inactiveStudents > 0) "Active" else "Students",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (inactiveStudents > 0) {
+                        Text(
+                            "($inactiveStudents inactive)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== INACTIVE STUDENTS CARD ====================
+
+@Composable
+private fun InactiveStudentsCard(
+    inactiveCount: Int,
+    onClick: () -> Unit
+) {
+    val animatedCount by animateIntAsState(
+        targetValue = inactiveCount,
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "inactive"
+    )
+    
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.97f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "scale"
+    )
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(90.dp)
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            ),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF475569),
+                            Color(0xFF334155),
+                            Color(0xFF1E293B)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+                    )
+                )
+        ) {
+            // Subtle decorative element
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .align(Alignment.CenterEnd)
+                    .offset(x = 40.dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFF64748B).copy(alpha = 0.3f),
+                                Color.Transparent
+                            )
+                        ),
+                        CircleShape
+                    )
+            )
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF64748B)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.PersonOff,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    
+                    Spacer(Modifier.width(14.dp))
+                    
+                    Column {
                             Text(
-                                totalDues.toRupees(),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
+                            "Inactive Students",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
                                 color = Color.White
                             )
-                        }
+                        Text(
+                            "View all deactivated students",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
                     }
+                }
+                
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "$animatedCount",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        "students",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
                 }
             }
         }
@@ -1402,9 +1566,25 @@ fun StudentListByClassScreen(
     }
     
     val isAllStudents = className == "ALL" && section == "ALL"
+    val isInactiveView = className == "INACTIVE"
     
-    // Get class-specific palette
-    val palette = if (!isAllStudents) getClassColorPalette(className) else null
+    // Get class-specific palette (null for ALL and INACTIVE views)
+    val palette = if (!isAllStudents && !isInactiveView) getClassColorPalette(className) else null
+    
+    // Class filter for inactive view
+    var selectedClassFilter by remember { mutableStateOf("ALL") }
+    val availableClasses = remember(state.students) {
+        listOf("ALL") + state.students.map { it.student.currentClass }.distinct().sorted()
+    }
+    
+    // Compute displayed count for header (accounts for class filter in inactive view)
+    val displayedCount = remember(state.filteredStudents, selectedClassFilter, isInactiveView) {
+        if (isInactiveView && selectedClassFilter != "ALL") {
+            state.filteredStudents.count { it.student.currentClass == selectedClassFilter }
+        } else {
+            state.filteredStudents.size
+        }
+    }
     
     // Handle back press
     BackHandler(enabled = state.searchQuery.isNotEmpty()) {
@@ -1421,12 +1601,14 @@ fun StudentListByClassScreen(
                     .drawBehind {
                         // Gradient background
                         drawRect(
-                            brush = if (isAllStudents) {
-                                Brush.linearGradient(
+                            brush = when {
+                                isInactiveView -> Brush.linearGradient(
+                                    colors = listOf(Color(0xFF475569), Color(0xFF1E293B))
+                                )
+                                isAllStudents -> Brush.linearGradient(
                                     colors = listOf(HeroCardGradientStart, HeroCardGradientEnd)
                                 )
-                            } else {
-                                Brush.linearGradient(
+                                else -> Brush.linearGradient(
                                     colors = listOf(
                                         palette!!.gradientStart,
                                         palette.gradientEnd
@@ -1462,8 +1644,27 @@ fun StudentListByClassScreen(
                         )
                     }
                     
-                    // Class icon for non-all views
-                    if (!isAllStudents && palette != null) {
+                    // Class icon for non-all views (including inactive view)
+                    if (isInactiveView) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color.White.copy(alpha = 0.2f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PersonOff,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                    } else if (!isAllStudents && palette != null) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = Color.White.copy(alpha = 0.2f),
@@ -1486,22 +1687,32 @@ fun StudentListByClassScreen(
                     
                     Column(Modifier.weight(1f)) {
                         Text(
-                            if (isAllStudents) "All Students" else "Class $className - $section", 
+                            when {
+                                isInactiveView -> "Inactive Students"
+                                isAllStudents -> "All Students"
+                                else -> "Class $className - $section"
+                            }, 
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold, 
                             color = Color.White,
                             letterSpacing = 0.3.sp
                         )
                         Text(
-                            "${state.filteredStudents.size} students", 
+                            when {
+                                isInactiveView && selectedClassFilter != "ALL" -> 
+                                    "$displayedCount inactive in Class $selectedClassFilter"
+                                isInactiveView -> "$displayedCount inactive students"
+                                state.inactiveCount > 0 -> "${state.filteredStudents.size} students (${state.inactiveCount} inactive)"
+                                else -> "${state.filteredStudents.size} students"
+                            }, 
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f),
                             fontWeight = FontWeight.Medium
                         )
                     }
                     
-                    // Premium "New" button
-                    if (!isAllStudents) {
+                    // Premium "New" button (hidden for ALL and INACTIVE views)
+                    if (!isAllStudents && !isInactiveView) {
                         Surface(
                             shape = RoundedCornerShape(18.dp),
                             color = Color.White,
@@ -1539,6 +1750,40 @@ fun StudentListByClassScreen(
         if (state.isLoading) {
             LoadingScreen(modifier = Modifier.padding(paddingValues))
         } else {
+            // Apply class filter for inactive view - defined at Box level for alphabet rail access
+            val displayedStudents = remember(state.filteredStudents, selectedClassFilter, isInactiveView) {
+                if (isInactiveView && selectedClassFilter != "ALL") {
+                    state.filteredStudents.filter { it.student.currentClass == selectedClassFilter }
+                } else {
+                    state.filteredStudents
+                }
+            }
+            
+            val displayedGrouped = remember(state.groupedStudents, selectedClassFilter, isInactiveView) {
+                if (isInactiveView && selectedClassFilter != "ALL") {
+                    state.groupedStudents.mapValues { (_, students) ->
+                        students.filter { it.student.currentClass == selectedClassFilter }
+                    }.filterValues { it.isNotEmpty() }
+                } else {
+                    state.groupedStudents
+                }
+            }
+            
+            // Compute available letters for alphabet rail based on displayed data
+            val displayedLetters = remember(displayedGrouped) {
+                displayedGrouped.keys.filter { it.isLetter() }.toList()
+            }
+            
+            // Function to get index in the displayed list
+            fun getDisplayedIndexForLetter(letter: Char): Int {
+                var index = 0
+                for ((key, students) in displayedGrouped) {
+                    if (key == letter) return index
+                    index += 1 + students.size // +1 for the header
+                }
+                return -1
+            }
+            
             Box(Modifier.fillMaxSize().padding(paddingValues)) {
                 Column(Modifier.fillMaxSize()) {
                     // Search bar
@@ -1550,15 +1795,126 @@ fun StudentListByClassScreen(
             )
             
                     // Modern Filter chips row with horizontal scroll
+                    if (isInactiveView) {
+                        // Class filter dropdown for inactive view
+                        var classDropdownExpanded by remember { mutableStateOf(false) }
+                        val slateColor = Color(0xFF64748B)
+                        
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // Scrollable filter chips
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Class dropdown styled like filter chip
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = if (selectedClassFilter != "ALL") 
+                                        slateColor.copy(alpha = 0.12f)
+                                    else 
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    border = if (selectedClassFilter != "ALL") 
+                                        BorderStroke(1.dp, slateColor.copy(alpha = 0.5f)) 
+                                    else null,
+                                    modifier = Modifier.clickable { classDropdownExpanded = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.School,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = if (selectedClassFilter != "ALL") 
+                                                slateColor
+                                            else 
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            if (selectedClassFilter == "ALL") "All Classes" else "Class $selectedClassFilter",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (selectedClassFilter != "ALL") FontWeight.SemiBold else FontWeight.Normal,
+                                            color = if (selectedClassFilter != "ALL") 
+                                                slateColor
+                                            else 
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Icon(
+                                            Icons.Default.ArrowDropDown,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = if (selectedClassFilter != "ALL") 
+                                                slateColor
+                                            else 
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                
+                                DropdownMenu(
+                                    expanded = classDropdownExpanded,
+                                    onDismissRequest = { classDropdownExpanded = false }
+                                ) {
+                                    availableClasses.forEach { classOption ->
+                                        DropdownMenuItem(
+                                            text = { 
+                                                Text(
+                                                    if (classOption == "ALL") "All Classes" else "Class $classOption",
+                                                    fontWeight = if (selectedClassFilter == classOption) FontWeight.SemiBold else FontWeight.Normal,
+                                                    color = if (selectedClassFilter == classOption) slateColor else MaterialTheme.colorScheme.onSurface
+                                                ) 
+                                            },
+                                            onClick = {
+                                                selectedClassFilter = classOption
+                                                classDropdownExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                if (selectedClassFilter == classOption) {
+                                                    Icon(
+                                                        Icons.Default.Check,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFF64748B)
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                            
+                            Spacer(Modifier.weight(1f))
+                            
+                            // Cycling Sort Chip
+                            SortChip(
+                                currentSort = state.sort,
+                                onClick = { 
+                                    viewModel.cycleSort()
+                                    scope.launch {
+                                        listState.scrollToItem(0)
+                                    }
+                                }
+                            )
+                            
+                            // Inactive count indicator
+                            Text(
+                                "$displayedCount students",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    } else {
                         Row(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             ModernFilterChip(
@@ -1584,11 +1940,8 @@ fun StudentListByClassScreen(
                                 onClick = { viewModel.setFilter(StudentFilter.TRANSPORT) },
                                 icon = Icons.Default.DirectionsBus
                             )
-                        }
                         
-                        Spacer(Modifier.width(8.dp))
-                        
-                        // Cycling Sort Chip - scrolls to top on change
+                            // Cycling Sort Chip
                         SortChip(
                             currentSort = state.sort,
                             onClick = { 
@@ -1598,12 +1951,29 @@ fun StudentListByClassScreen(
                                 }
                             }
                         )
+                            
+                            // Inactive filter - at the end
+                            ModernFilterChip(
+                                text = "Inactive",
+                                selected = state.filter == StudentFilter.INACTIVE,
+                                onClick = { 
+                                    // Toggle behavior - click again to deselect
+                                    if (state.filter == StudentFilter.INACTIVE) {
+                                        viewModel.setFilter(StudentFilter.ALL)
+                                    } else {
+                                        viewModel.setFilter(StudentFilter.INACTIVE)
+                                    }
+                                },
+                                icon = Icons.Default.PersonOff,
+                                selectedColor = Color(0xFF64748B)
+                            )
+                        }
                     }
                     
                     Spacer(Modifier.height(8.dp))
                     
                     // Student list
-                    if (state.filteredStudents.isEmpty()) {
+                    if (displayedStudents.isEmpty()) {
                 EmptyState(
                     icon = Icons.Default.Group,
                             title = "No Students", 
@@ -1623,14 +1993,14 @@ fun StudentListByClassScreen(
                         ) {
                             if (isAlphabeticalSort) {
                                 // Grouped by alphabet with headers
-                                state.groupedStudents.forEach { (letter, students) ->
+                                displayedGrouped.forEach { (letter, students) ->
                                     // Non-sticky alphabet header (fixes the overlap issue)
                                     item(key = "header_$letter") {
                                         Text(
                                             letter.toString(),
                                             style = MaterialTheme.typography.titleSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = Saffron,
+                                            color = if (isInactiveView) Color(0xFF64748B) else Saffron,
                                             modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                                         )
                                     }
@@ -1645,13 +2015,14 @@ fun StudentListByClassScreen(
                                             onCollectClick = { 
                                                 navController.navigate(Screen.CollectFee.createRoute(student.student.id)) 
                                             },
-                                            showClass = isAllStudents || state.searchQuery.isNotBlank()
+                                            showClass = isAllStudents || isInactiveView || state.searchQuery.isNotBlank(),
+                                            hideInactiveBadge = true  // Header already shows inactive count
                                         )
                                     }
                                 }
                             } else {
                                 // Flat list without alphabet headers for other sorts
-                                items(state.filteredStudents, key = { it.student.id }) { student ->
+                                items(displayedStudents, key = { it.student.id }) { student ->
                                     PremiumStudentCard(
                                         studentWithBalance = student,
                                         onClick = { 
@@ -1660,7 +2031,8 @@ fun StudentListByClassScreen(
                                         onCollectClick = { 
                                             navController.navigate(Screen.CollectFee.createRoute(student.student.id)) 
                                         },
-                                        showClass = isAllStudents || state.searchQuery.isNotBlank()
+                                        showClass = isAllStudents || isInactiveView || state.searchQuery.isNotBlank(),
+                                        hideInactiveBadge = true  // Header already shows inactive count
                                     )
                                 }
                             }
@@ -1670,7 +2042,7 @@ fun StudentListByClassScreen(
                 
                 // Alphabet Rail - smooth animated visibility for alphabetical sorting
                 AnimatedVisibility(
-                    visible = isAlphabeticalSort && state.filteredStudents.isNotEmpty() && state.availableLetters.isNotEmpty(),
+                    visible = isAlphabeticalSort && displayedStudents.isNotEmpty() && displayedLetters.isNotEmpty(),
                     enter = fadeIn(animationSpec = tween(200)) + slideInHorizontally(
                         initialOffsetX = { it },
                         animationSpec = tween(200)
@@ -1682,10 +2054,10 @@ fun StudentListByClassScreen(
                     modifier = Modifier.align(Alignment.CenterEnd)
                 ) {
                     ContactsAlphabetRail(
-                        letters = state.availableLetters,
+                        letters = displayedLetters,
                         onLetterSelected = { letter ->
                             scope.launch {
-                                val index = state.getIndexForLetter(letter)
+                                val index = getDisplayedIndexForLetter(letter)
                                 if (index >= 0) {
                                     listState.animateScrollToItem(index)
                                 }
@@ -1907,17 +2279,20 @@ private fun ContactsAlphabetRail(
 
 // ==================== PREMIUM STUDENT CARD (with press animation) ====================
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PremiumStudentCard(
     studentWithBalance: StudentWithBalance,
     onClick: () -> Unit,
     onCollectClick: () -> Unit,
-    showClass: Boolean = false
+    showClass: Boolean = false,
+    hideInactiveBadge: Boolean = false  // Hide badge when in inactive-only view
 ) {
     val student = studentWithBalance.student
     val balance = studentWithBalance.currentBalance
     val hasAdvance = balance < 0
     val hasDues = balance > 0
+    val isInactive = !student.isActive
     
     // Press animation
     val interactionSource = remember { MutableInteractionSource() }
@@ -1933,6 +2308,10 @@ private fun PremiumStudentCard(
     
     // Get avatar color based on status
     val avatarColors = when {
+        isInactive -> listOf(
+            Color.Gray.copy(alpha = 0.15f),
+            Color.Gray.copy(alpha = 0.08f)
+        )
         hasDues -> listOf(
             ErrorRed.copy(alpha = 0.15f),
             ErrorRed.copy(alpha = 0.08f)
@@ -1948,19 +2327,24 @@ private fun PremiumStudentCard(
     }
     
     val avatarTextColor = when {
+        isInactive -> Color.Gray
         hasDues -> ErrorRed
         hasAdvance -> PaidChipText
         else -> Saffron
     }
     
+    // Card opacity for inactive students
+    val cardAlpha = if (isInactive) 0.7f else 1f
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .scale(scale)
+            .alpha(cardAlpha)
             .shadow(
                 elevation = if (isPressed) 2.dp else 4.dp,
                 shape = RoundedCornerShape(18.dp),
-                spotColor = if (hasDues) ErrorRed.copy(alpha = 0.1f) else ShadowWarm
+                spotColor = if (hasDues && !isInactive) ErrorRed.copy(alpha = 0.1f) else ShadowWarm
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -2015,12 +2399,12 @@ private fun PremiumStudentCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(4.dp))
                 
-                // Class and Account number row
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                // Class and Account number row - using FlowRow for better wrapping
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (showClass) {
                         Surface(
@@ -2048,15 +2432,34 @@ private fun PremiumStudentCard(
                             fontWeight = FontWeight.Medium
                         )
                     }
+                    
+                    // Inactive badge (hidden in inactive-only view since all are inactive)
+                    if (isInactive && !hideInactiveBadge) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = ErrorRed.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                "INACTIVE",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ErrorRed,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
             
             Spacer(Modifier.width(8.dp))
             
-            // Balance Badge - Premium Style
+            // Balance Badge - Premium Style (shown for all students including inactive)
                 Surface(
                 shape = RoundedCornerShape(12.dp),
                     color = when {
+                    isInactive && hasDues -> Color.Gray.copy(alpha = 0.15f)
+                    isInactive -> Color.Gray.copy(alpha = 0.1f)
                     hasDues -> DueChipBackground
                     hasAdvance -> AdvanceChipBackground
                         else -> PaidChipBackground
@@ -2072,6 +2475,8 @@ private fun PremiumStudentCard(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = when {
+                        isInactive && hasDues -> Color.Gray
+                        isInactive -> Color.Gray.copy(alpha = 0.7f)
                         hasDues -> DueChipText
                         hasAdvance -> AdvanceChipText
                             else -> PaidChipText
@@ -2089,12 +2494,14 @@ fun StudentCardCompact(
     studentWithBalance: StudentWithBalance,
     onClick: () -> Unit,
     onCollectClick: (() -> Unit)? = null,
-    showClass: Boolean = false
+    showClass: Boolean = false,
+    hideInactiveBadge: Boolean = false
 ) {
     val student = studentWithBalance.student
     val balance = studentWithBalance.currentBalance
     val hasDues = balance > 0
     val hasAdvance = balance < 0
+    val isInactive = !student.isActive
     
     // Press animation
     val interactionSource = remember { MutableInteractionSource() }
@@ -2105,10 +2512,14 @@ fun StudentCardCompact(
         label = "compactScale"
     )
     
+    // Card opacity for inactive students
+    val cardAlpha = if (isInactive) 0.7f else 1f
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .scale(scale)
+            .alpha(cardAlpha)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -2131,6 +2542,7 @@ fun StudentCardCompact(
                     .clip(CircleShape)
                     .background(
                         when {
+                            isInactive -> Color.Gray.copy(alpha = 0.1f)
                             hasDues -> ErrorRed.copy(alpha = 0.1f)
                             hasAdvance -> PaidChipText.copy(alpha = 0.1f)
                             else -> Saffron.copy(alpha = 0.1f)
@@ -2143,6 +2555,7 @@ fun StudentCardCompact(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = when {
+                        isInactive -> Color.Gray
                         hasDues -> ErrorRed
                         hasAdvance -> PaidChipText
                         else -> Saffron
@@ -2181,6 +2594,21 @@ fun StudentCardCompact(
                             )
                         }
                     }
+                    // Inactive badge (hidden in inactive-only view)
+                    if (isInactive && !hideInactiveBadge) {
+                        Surface(
+                            shape = RoundedCornerShape(5.dp),
+                            color = ErrorRed.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                "INACTIVE",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ErrorRed,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
                 Text(
                     "S/o ${student.fatherName} • A/C: ${student.accountNumber}",
@@ -2193,10 +2621,12 @@ fun StudentCardCompact(
             
             Spacer(Modifier.width(8.dp))
             
-            // Balance badge
+            // Balance badge (shown for all students including inactive)
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = when {
+                    isInactive && hasDues -> Color.Gray.copy(alpha = 0.15f)
+                    isInactive -> Color.Gray.copy(alpha = 0.1f)
                     hasDues -> DueChipBackground
                     hasAdvance -> AdvanceChipBackground
                     else -> PaidChipBackground
@@ -2212,6 +2642,8 @@ fun StudentCardCompact(
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = when {
+                        isInactive && hasDues -> Color.Gray
+                        isInactive -> Color.Gray.copy(alpha = 0.7f)
                         hasDues -> DueChipText
                         hasAdvance -> AdvanceChipText
                         else -> PaidChipText

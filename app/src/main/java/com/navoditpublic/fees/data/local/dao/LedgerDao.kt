@@ -208,6 +208,151 @@ interface LedgerDao {
         AND reference_type = 'OPENING_BALANCE'
     """)
     suspend fun deleteOpeningBalanceEntry(studentId: Long, sessionId: Long)
+    
+    // ========== Session Promotion Methods ==========
+    
+    /**
+     * Get all students with positive balance (dues) for carry forward
+     */
+    @Query("""
+        SELECT student_id, 
+               SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
+               SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END) as balance
+        FROM ledger_entries
+        WHERE is_reversed = 0
+        GROUP BY student_id
+        HAVING balance > 0
+    """)
+    suspend fun getStudentsWithPositiveBalance(): List<StudentBalance>
+    
+    /**
+     * Get count of students with positive balance
+     */
+    @Query("""
+        SELECT COUNT(*) FROM (
+            SELECT student_id
+            FROM ledger_entries
+            WHERE is_reversed = 0
+            GROUP BY student_id
+            HAVING SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
+                   SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END) > 0
+        )
+    """)
+    suspend fun getStudentsWithDuesCount(): Int
+    
+    /**
+     * Get total pending dues across all students
+     */
+    @Query("""
+        SELECT COALESCE(SUM(balance), 0.0) FROM (
+            SELECT student_id,
+                   SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
+                   SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END) as balance
+            FROM ledger_entries
+            WHERE is_reversed = 0
+            GROUP BY student_id
+            HAVING balance > 0
+        )
+    """)
+    suspend fun getTotalPendingDuesSync(): Double
+    
+    /**
+     * Delete all FEE_CHARGE entries for a session (for revert)
+     */
+    @Query("""
+        DELETE FROM ledger_entries 
+        WHERE session_id = :sessionId 
+        AND reference_type = 'FEE_CHARGE'
+    """)
+    suspend fun deleteFeeChargeEntriesForSession(sessionId: Long): Int
+    
+    /**
+     * Delete all OPENING_BALANCE entries for a session (for revert)
+     */
+    @Query("""
+        DELETE FROM ledger_entries 
+        WHERE session_id = :sessionId 
+        AND reference_type = 'OPENING_BALANCE'
+    """)
+    suspend fun deleteOpeningBalanceEntriesForSession(sessionId: Long): Int
+    
+    /**
+     * Delete all ledger entries for a session (for complete revert)
+     */
+    @Query("DELETE FROM ledger_entries WHERE session_id = :sessionId")
+    suspend fun deleteAllEntriesForSession(sessionId: Long): Int
+    
+    /**
+     * Get count of ledger entries for a session
+     */
+    @Query("SELECT COUNT(*) FROM ledger_entries WHERE session_id = :sessionId AND is_reversed = 0")
+    suspend fun getEntryCountForSession(sessionId: Long): Int
+    
+    /**
+     * Check if session has any RECEIPT entries (payments collected)
+     */
+    @Query("""
+        SELECT EXISTS(
+            SELECT 1 FROM ledger_entries 
+            WHERE session_id = :sessionId 
+            AND reference_type = 'RECEIPT'
+            AND is_reversed = 0
+        )
+    """)
+    suspend fun hasReceiptEntriesForSession(sessionId: Long): Boolean
+    
+    /**
+     * Delete all RECEIPT (credit) entries for a session (for revert when force deleting receipts)
+     */
+    @Query("""
+        DELETE FROM ledger_entries
+        WHERE session_id = :sessionId
+        AND reference_type = 'RECEIPT'
+    """)
+    suspend fun deleteReceiptEntriesForSession(sessionId: Long): Int
+    
+    /**
+     * Get the closing balance for a student in a specific session.
+     * This is calculated as (total debits - total credits) for entries in that session.
+     */
+    @Query("""
+        SELECT COALESCE(
+            SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
+            SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END),
+            0.0
+        )
+        FROM ledger_entries
+        WHERE student_id = :studentId
+        AND session_id = :sessionId
+        AND is_reversed = 0
+    """)
+    suspend fun getClosingBalanceForSession(studentId: Long, sessionId: Long): Double
+    
+    @Query("""
+        SELECT * FROM ledger_entries 
+        WHERE reference_id = :receiptId
+        AND reference_type = 'RECEIPT'
+        AND is_reversed = 0
+        LIMIT 1
+    """)
+    suspend fun getEntryForReceipt(receiptId: Long): LedgerEntryEntity?
+    
+    // ========== Student Deletion Checks ==========
+    
+    /**
+     * Check if a student has any ledger entries.
+     * Used to determine if a student can be permanently deleted.
+     */
+    @Query("SELECT EXISTS(SELECT 1 FROM ledger_entries WHERE student_id = :studentId)")
+    suspend fun hasEntriesForStudent(studentId: Long): Boolean
 }
+
+/**
+ * Data class for student balance query result
+ */
+data class StudentBalance(
+    val student_id: Long,
+    val balance: Double
+)
 
 

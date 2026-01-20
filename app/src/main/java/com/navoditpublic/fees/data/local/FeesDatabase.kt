@@ -14,6 +14,7 @@ import com.navoditpublic.fees.data.local.dao.FeeStructureDao
 import com.navoditpublic.fees.data.local.dao.LedgerDao
 import com.navoditpublic.fees.data.local.dao.ReceiptDao
 import com.navoditpublic.fees.data.local.dao.SchoolSettingsDao
+import com.navoditpublic.fees.data.local.dao.SessionPromotionDao
 import com.navoditpublic.fees.data.local.dao.StudentDao
 import com.navoditpublic.fees.data.local.dao.TransportRouteDao
 import com.navoditpublic.fees.data.local.dao.TransportFeeHistoryDao
@@ -32,6 +33,7 @@ import com.navoditpublic.fees.data.local.entity.TransportRouteEntity
 import com.navoditpublic.fees.data.local.entity.TransportFeeHistoryEntity
 import com.navoditpublic.fees.data.local.entity.TransportEnrollmentEntity
 import com.navoditpublic.fees.data.local.entity.SavedReportViewEntity
+import com.navoditpublic.fees.data.local.entity.SessionPromotionEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,9 +52,10 @@ import kotlinx.coroutines.launch
         LedgerEntryEntity::class,
         SchoolSettingsEntity::class,
         AuditLogEntity::class,
-        SavedReportViewEntity::class
+        SavedReportViewEntity::class,
+        SessionPromotionEntity::class
     ],
-    version = 7,
+    version = 9,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -70,6 +73,7 @@ abstract class FeesDatabase : RoomDatabase() {
     abstract fun schoolSettingsDao(): SchoolSettingsDao
     abstract fun auditLogDao(): AuditLogDao
     abstract fun savedReportViewDao(): SavedReportViewDao
+    abstract fun sessionPromotionDao(): SessionPromotionDao
     
     companion object {
         const val DATABASE_NAME = "fees_database"
@@ -238,13 +242,68 @@ abstract class FeesDatabase : RoomDatabase() {
             }
         }
         
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create session_promotions table for tracking promotions and enabling revert
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS session_promotions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        source_session_id INTEGER NOT NULL,
+                        target_session_id INTEGER NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'COMPLETED',
+                        copied_fee_structures INTEGER NOT NULL DEFAULT 0,
+                        carried_forward_dues INTEGER NOT NULL DEFAULT 0,
+                        promoted_classes INTEGER NOT NULL DEFAULT 0,
+                        deactivated_12th_students INTEGER NOT NULL DEFAULT 0,
+                        added_tuition_fees INTEGER NOT NULL DEFAULT 0,
+                        added_transport_fees INTEGER NOT NULL DEFAULT 0,
+                        set_as_current INTEGER NOT NULL DEFAULT 0,
+                        fee_structures_copied_count INTEGER NOT NULL DEFAULT 0,
+                        students_with_dues_carried INTEGER NOT NULL DEFAULT 0,
+                        total_dues_carried_forward REAL NOT NULL DEFAULT 0.0,
+                        students_promoted INTEGER NOT NULL DEFAULT 0,
+                        students_deactivated INTEGER NOT NULL DEFAULT 0,
+                        students_with_fees_added INTEGER NOT NULL DEFAULT 0,
+                        total_fees_added REAL NOT NULL DEFAULT 0.0,
+                        promoted_at INTEGER NOT NULL,
+                        reverted_at INTEGER,
+                        revert_reason TEXT,
+                        FOREIGN KEY(source_session_id) REFERENCES academic_sessions(id) ON DELETE RESTRICT,
+                        FOREIGN KEY(target_session_id) REFERENCES academic_sessions(id) ON DELETE RESTRICT
+                    )
+                """)
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_session_promotions_source_session_id ON session_promotions(source_session_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_session_promotions_target_session_id ON session_promotions(target_session_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_session_promotions_status ON session_promotions(status)")
+            }
+        }
+        
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Change account_number from global unique to class-scoped
+                // Uniqueness is enforced at app level (DAO checks active students in same class)
+                // This allows each class to have its own account numbers (1-100 per class)
+                
+                // Drop old global unique index on account_number (if exists)
+                db.execSQL("DROP INDEX IF EXISTS index_students_account_number")
+                
+                // Create non-unique composite index for query performance
+                // Room expects this based on entity annotation
+                db.execSQL("DROP INDEX IF EXISTS index_students_current_class_account_number")
+                db.execSQL("""
+                    CREATE INDEX index_students_current_class_account_number 
+                    ON students(current_class, account_number)
+                """)
+            }
+        }
+        
         fun create(context: Context): FeesDatabase {
             return Room.databaseBuilder(
                 context.applicationContext,
                 FeesDatabase::class.java,
                 DATABASE_NAME
             )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             .addCallback(DatabaseCallback())
             // NOTE: Removed fallbackToDestructiveMigration() to protect user data
             // All schema changes must have explicit migrations
@@ -255,6 +314,10 @@ abstract class FeesDatabase : RoomDatabase() {
     private class DatabaseCallback : Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
+            // Account number uniqueness per class is enforced at app level
+            // (DAO validates active students in same class before insert/update)
+            // No additional database indexes needed beyond what Room creates from entity
+            
             // Seed initial data
             CoroutineScope(Dispatchers.IO).launch {
                 // Initial data will be seeded through DataSeeder

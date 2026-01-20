@@ -1022,7 +1022,7 @@ class AddEditStudentViewModel @Inject constructor(
                             e.message?.contains("UNIQUE constraint failed") == true &&
                                 e.message?.contains("sr_number") == true -> "SR Number already exists"
                             e.message?.contains("UNIQUE constraint failed") == true &&
-                                e.message?.contains("account_number") == true -> "Account Number already exists"
+                                e.message?.contains("account_number") == true -> "Account Number already exists in this class"
                             else -> e.message ?: "Failed to add student"
                         }
                         _events.emit(AddEditStudentEvent.Error(errorMsg))
@@ -1102,18 +1102,22 @@ class AddEditStudentViewModel @Inject constructor(
             }
         }
         
-        // Account Number validation
+        // Account Number validation (unique within the same class)
+        val currentClass = _state.value.currentClass
         if (accountNumber.isBlank()) {
             _state.value = _state.value.copy(accountNumberError = "Account Number is required")
             isValid = false
+        } else if (currentClass.isBlank()) {
+            // Can't validate account number without knowing the class
+            // Class validation will catch this separately
         } else {
             val exists = if (_state.value.isEditMode && editStudentId != null) {
-                studentRepository.accountNumberExistsExcluding(accountNumber, editStudentId)
+                studentRepository.accountNumberExistsInClassExcluding(accountNumber, currentClass, editStudentId)
             } else {
-                studentRepository.accountNumberExists(accountNumber)
+                studentRepository.accountNumberExistsInClass(accountNumber, currentClass)
             }
             if (exists) {
-                _state.value = _state.value.copy(accountNumberError = "Account Number already exists")
+                _state.value = _state.value.copy(accountNumberError = "Account Number already exists in $currentClass")
                 isValid = false
             }
         }

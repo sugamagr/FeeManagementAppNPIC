@@ -15,6 +15,7 @@ import com.navoditpublic.fees.data.local.dao.TransportRouteDao
 import com.navoditpublic.fees.data.local.dao.TransportFeeHistoryDao
 import com.navoditpublic.fees.data.local.dao.TransportEnrollmentDao
 import com.navoditpublic.fees.data.local.dao.SavedReportViewDao
+import com.navoditpublic.fees.data.local.dao.SessionPromotionDao
 import com.navoditpublic.fees.data.repository.AuditRepositoryImpl
 import com.navoditpublic.fees.data.repository.FeeRepositoryImpl
 import com.navoditpublic.fees.data.repository.SettingsRepositoryImpl
@@ -66,6 +67,9 @@ object DatabaseModule {
     
     @Provides
     fun provideSavedReportViewDao(database: FeesDatabase): SavedReportViewDao = database.savedReportViewDao()
+    
+    @Provides
+    fun provideSessionPromotionDao(database: FeesDatabase): SessionPromotionDao = database.sessionPromotionDao()
     
     @Provides
     fun provideReceiptDao(database: FeesDatabase): ReceiptDao = database.receiptDao()

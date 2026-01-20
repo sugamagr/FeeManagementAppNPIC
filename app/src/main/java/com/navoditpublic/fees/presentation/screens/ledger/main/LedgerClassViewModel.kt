@@ -213,7 +213,10 @@ class LedgerClassViewModel @Inject constructor(
             LedgerSort.NAME_ASC -> filtered.sortedBy { it.student.name.lowercase() }
             LedgerSort.DUES_HIGH -> filtered.sortedByDescending { it.netBalance }
             LedgerSort.DUES_LOW -> filtered.sortedBy { it.netBalance }
-            LedgerSort.ACCOUNT_NUMBER -> filtered.sortedBy { it.student.accountNumber }
+            // Numeric sorting for account numbers (1, 2, 10 instead of 1, 10, 2)
+            LedgerSort.ACCOUNT_NUMBER -> filtered.sortedWith(
+                compareBy { it.student.accountNumber.toIntOrNull() ?: Int.MAX_VALUE }
+            )
         }
     }
     

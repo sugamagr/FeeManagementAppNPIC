@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class StudentFilter {
-    ALL, WITH_DUES, NO_DUES, TRANSPORT
+    ALL, WITH_DUES, NO_DUES, TRANSPORT, INACTIVE
 }
 
 enum class StudentSort {
@@ -30,6 +30,7 @@ data class StudentListState(
     val searchQuery: String = "",
     val filter: StudentFilter = StudentFilter.ALL,
     val sort: StudentSort = StudentSort.NAME_ASC,
+    val inactiveCount: Int = 0,
     val error: String? = null
 ) {
     fun getIndexForLetter(letter: Char): Int {
@@ -55,27 +56,38 @@ class StudentListViewModel @Inject constructor(
             return // Already loaded
         }
         
+        // For INACTIVE view, set the filter to INACTIVE automatically
+        val initialFilter = if (className == "INACTIVE") StudentFilter.INACTIVE else StudentFilter.ALL
+        
         viewModelScope.launch {
             _state.value = _state.value.copy(
                 isLoading = true,
                 className = className,
-                section = section
+                section = section,
+                filter = initialFilter
             )
             
             try {
-                studentRepository.getStudentsWithBalance().collect { allStudents ->
-                    // Handle "ALL" case to show all students
-                    val classStudents = if (className == "ALL" && section == "ALL") {
-                        allStudents
-                    } else {
-                        allStudents.filter { 
+                // Use getAllStudentsWithBalance to include inactive students
+                studentRepository.getAllStudentsWithBalance().collect { allStudents ->
+                    // Handle special cases
+                    val classStudents = when {
+                        // INACTIVE view - show all inactive students from all classes
+                        className == "INACTIVE" -> allStudents.filter { !it.student.isActive }
+                        // ALL view - show all students
+                        className == "ALL" && section == "ALL" -> allStudents
+                        // Regular class/section view
+                        else -> allStudents.filter { 
                             it.student.currentClass == className && it.student.section == section
                         }
                     }
                     
+                    val inactiveCount = classStudents.count { !it.student.isActive }
+                    
                     _state.value = _state.value.copy(
                         isLoading = false,
                         students = classStudents,
+                        inactiveCount = inactiveCount,
                         error = null
                     )
                     applyFiltersAndSort()
@@ -131,9 +143,10 @@ class StudentListViewModel @Inject constructor(
         // Apply filter
         filtered = when (currentState.filter) {
             StudentFilter.ALL -> filtered
-            StudentFilter.WITH_DUES -> filtered.filter { it.currentBalance > 0 }
-            StudentFilter.NO_DUES -> filtered.filter { it.currentBalance <= 0 }
-            StudentFilter.TRANSPORT -> filtered.filter { it.student.hasTransport }
+            StudentFilter.WITH_DUES -> filtered.filter { it.currentBalance > 0 && it.student.isActive }
+            StudentFilter.NO_DUES -> filtered.filter { it.currentBalance <= 0 && it.student.isActive }
+            StudentFilter.TRANSPORT -> filtered.filter { it.student.hasTransport && it.student.isActive }
+            StudentFilter.INACTIVE -> filtered.filter { !it.student.isActive }
         }
         
         // Apply sort

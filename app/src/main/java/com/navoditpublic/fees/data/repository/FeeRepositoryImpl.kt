@@ -861,6 +861,213 @@ class FeeRepositoryImpl @Inject constructor(
     override suspend fun getPaymentsCount(studentId: Long, sessionId: Long): Int {
         return receiptDao.getPaymentsCount(studentId, sessionId)
     }
+    
+    // ========== Session Promotion Methods ==========
+    
+    override suspend fun carryForwardDuesForAllStudents(
+        newSessionId: Long,
+        sessionStartDate: Long
+    ): Result<Pair<Int, Double>> = runCatching {
+        database.withTransaction {
+            val studentsWithBalance = ledgerDao.getStudentsWithPositiveBalance()
+            var totalAmount = 0.0
+            var studentCount = 0
+            
+            for (studentBalance in studentsWithBalance) {
+                // Skip if already has opening balance in new session (idempotent)
+                val existingEntry = ledgerDao.getOpeningBalanceEntry(studentBalance.student_id, newSessionId)
+                if (existingEntry != null) {
+                    continue
+                }
+                
+                val balance = studentBalance.balance
+                if (balance > 0) {
+                    val ledgerEntry = LedgerEntryEntity(
+                        studentId = studentBalance.student_id,
+                        sessionId = newSessionId,
+                        entryDate = sessionStartDate,
+                        particulars = "Previous Session Dues (Carried Forward)",
+                        entryType = LedgerEntryType.DEBIT,
+                        debitAmount = balance,
+                        creditAmount = 0.0,
+                        balance = balance, // Starting balance for new session
+                        referenceType = LedgerReferenceType.OPENING_BALANCE,
+                        referenceId = 0
+                    )
+                    ledgerDao.insert(ledgerEntry)
+                    totalAmount += balance
+                    studentCount++
+                }
+            }
+            
+            Pair(studentCount, totalAmount)
+        }
+    }
+    
+    override suspend fun copyFeeStructures(
+        sourceSessionId: Long, 
+        targetSessionId: Long
+    ): Result<Int> = runCatching {
+        // Check if target session already has fee structures (idempotent)
+        val existingCount = feeStructureDao.getCountForSession(targetSessionId)
+        if (existingCount > 0) {
+            // Already has fee structures, skip to avoid duplicates
+            return@runCatching 0
+        }
+        
+        val sourceFees = feeStructureDao.getAllFeeStructuresForSession(sourceSessionId)
+        val newFees = sourceFees.map { fee ->
+            fee.copy(
+                id = 0,
+                sessionId = targetSessionId,
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis()
+            )
+        }
+        feeStructureDao.insertAll(newFees)
+        newFees.size
+    }
+    
+    override suspend fun deleteFeeChargeEntriesForSession(sessionId: Long): Result<Int> = runCatching {
+        ledgerDao.deleteFeeChargeEntriesForSession(sessionId)
+    }
+    
+    override suspend fun deleteOpeningBalanceEntriesForSession(sessionId: Long): Result<Int> = runCatching {
+        ledgerDao.deleteOpeningBalanceEntriesForSession(sessionId)
+    }
+    
+    override suspend fun deleteFeeStructuresForSession(sessionId: Long): Result<Int> = runCatching {
+        feeStructureDao.deleteFeeStructuresForSession(sessionId)
+    }
+    
+    override suspend fun getStudentsWithDuesCount(): Int {
+        return ledgerDao.getStudentsWithDuesCount()
+    }
+    
+    override suspend fun getTotalPendingDuesSync(): Double {
+        return ledgerDao.getTotalPendingDuesSync()
+    }
+    
+    override suspend fun getReceiptCountForSession(sessionId: Long): Int {
+        return receiptDao.getReceiptCountForSession(sessionId)
+    }
+    
+    override suspend fun getTotalCollectionForSession(sessionId: Long): Double {
+        return receiptDao.getTotalCollectionForSession(sessionId)
+    }
+    
+    override suspend fun deleteReceiptsForSession(sessionId: Long): Result<Int> = runCatching {
+        database.withTransaction {
+            // Delete receipt items first (due to foreign key)
+            receiptDao.deleteReceiptItemsForSession(sessionId)
+            // Then delete receipts
+            receiptDao.deleteReceiptsForSession(sessionId)
+        }
+    }
+    
+    override suspend fun deleteReceiptLedgerEntriesForSession(sessionId: Long): Result<Int> = runCatching {
+        ledgerDao.deleteReceiptEntriesForSession(sessionId)
+    }
+    
+    override suspend fun getFeeStructureCountForSession(sessionId: Long): Int {
+        return feeStructureDao.getCountForSession(sessionId)
+    }
+    
+    // ========== Session Balance Adjustment Methods ==========
+    
+    override suspend fun getClosingBalanceForSession(studentId: Long, sessionId: Long): Double {
+        return ledgerDao.getClosingBalanceForSession(studentId, sessionId)
+    }
+    
+    override suspend fun updateOpeningBalanceFromClosingBalance(
+        studentId: Long,
+        sourceSessionId: Long,
+        targetSessionId: Long
+    ): Result<Double> = runCatching {
+        database.withTransaction {
+            // Get the closing balance from the source (previous) session
+            val closingBalance = ledgerDao.getClosingBalanceForSession(studentId, sourceSessionId)
+            
+            // Get the session start date for the entry date
+            val targetSession = academicSessionDao.getById(targetSessionId)
+                ?: throw IllegalArgumentException("Target session not found")
+            
+            // Sync the opening balance entry (create/update/delete as needed)
+            syncOpeningBalanceEntry(
+                studentId = studentId,
+                sessionId = targetSessionId,
+                newAmount = closingBalance,
+                date = targetSession.startDate,
+                remarks = "Auto-adjusted from previous session"
+            ).getOrThrow()
+            
+            closingBalance
+        }
+    }
+    
+    override suspend fun editReceiptWithLedger(
+        receipt: Receipt,
+        items: List<ReceiptItem>
+    ): Result<Double> = runCatching {
+        database.withTransaction {
+            // Get the old receipt to compare amounts
+            val oldReceipt = receiptDao.getById(receipt.id)
+                ?: throw IllegalArgumentException("Receipt not found")
+            
+            // Cannot edit cancelled receipts
+            if (oldReceipt.isCancelled) {
+                throw IllegalStateException("Cannot edit a cancelled receipt")
+            }
+            
+            val oldAmount = oldReceipt.netAmount
+            val newAmount = receipt.netAmount
+            
+            // Update receipt
+            receiptDao.updateReceipt(receipt.toEntity().copy(updatedAt = System.currentTimeMillis()))
+            
+            // Update receipt items - delete old ones and insert new ones
+            receiptDao.deleteReceiptItems(receipt.id)
+            items.forEach { item ->
+                // Reset id to 0 for new insert, set correct receiptId
+                receiptDao.insertReceiptItem(item.copy(id = 0, receiptId = receipt.id).toEntity())
+            }
+            
+            // Find the original CREDIT ledger entry for this receipt
+            val existingEntry = ledgerDao.getEntryForReceipt(receipt.id)
+            
+            if (existingEntry != null && !existingEntry.isReversed) {
+                // Update the ledger entry (amount and/or particulars may have changed)
+                val amountChanged = oldAmount != newAmount
+                ledgerDao.update(existingEntry.copy(
+                    creditAmount = newAmount,
+                    particulars = "Receipt #${receipt.receiptNumber} - ${receipt.remarks ?: "Fee Payment"}${if (amountChanged) " (Edited)" else ""}"
+                ))
+                
+                // Only recalculate balances if amount changed
+                if (amountChanged) {
+                    recalculateStudentBalances(receipt.studentId)
+                }
+            }
+            
+            oldAmount // Return old amount for reference
+        }
+    }
+    
+    override suspend fun getLedgerEntryForReceipt(receiptId: Long): LedgerEntry? {
+        return ledgerDao.getEntryForReceipt(receiptId)?.let { LedgerEntry.fromEntity(it) }
+    }
+    
+    // ========== Student Deletion Checks ==========
+    
+    override suspend fun hasLedgerEntries(studentId: Long): Boolean {
+        return ledgerDao.hasEntriesForStudent(studentId)
+    }
+    
+    override suspend fun hasReceipts(studentId: Long): Boolean {
+        return receiptDao.hasReceiptsForStudent(studentId)
+    }
+    
+    override suspend fun canDeleteStudent(studentId: Long): Boolean {
+        return !hasLedgerEntries(studentId) && !hasReceipts(studentId)
+    }
 }
-
-

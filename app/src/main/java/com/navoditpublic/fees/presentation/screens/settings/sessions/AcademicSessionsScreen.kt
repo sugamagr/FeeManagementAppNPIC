@@ -2,13 +2,8 @@ package com.navoditpublic.fees.presentation.screens.settings.sessions
 
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,29 +23,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Payment
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -58,13 +50,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -81,13 +68,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -96,7 +83,6 @@ import com.navoditpublic.fees.domain.model.AcademicSession
 import com.navoditpublic.fees.presentation.components.LoadingScreen
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronDark
-import com.navoditpublic.fees.util.toRupees
 import kotlinx.coroutines.delay
 
 // Color palette - matching Dashboard
@@ -118,14 +104,12 @@ fun AcademicSessionsScreen(
     val context = LocalContext.current
     var showAddDialog by remember { mutableStateOf(false) }
     var newSessionName by remember { mutableStateOf("") }
-    var addTuition by remember { mutableStateOf(true) }
-    var addTransport by remember { mutableStateOf(true) }
     var showSearch by remember { mutableStateOf(false) }
     var animateItems by remember { mutableStateOf(false) }
     
-    // Confirmation dialogs
-    var sessionToDeactivate by remember { mutableStateOf<AcademicSession?>(null) }
-    var sessionToDelete by remember { mutableStateOf<AcademicSession?>(null) }
+    // Check if this is the first session (no active sessions exist)
+    // Allow creating first session if no active sessions, even if there are inactive ones (legacy data)
+    val isFirstSession = state.sessions.isEmpty()
     
     LaunchedEffect(state.isLoading) {
         if (!state.isLoading) {
@@ -145,10 +129,17 @@ fun AcademicSessionsScreen(
                 is SessionEvent.Error -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
                 }
-                is SessionEvent.FeesAdded -> {
+                is SessionEvent.PromotionComplete -> {
                     Toast.makeText(
-                        context, 
-                        "Added fees for ${event.studentCount} students. Total: ${event.totalFees.toRupees()}", 
+                        context,
+                        "Migration complete! ${event.result.studentsPromoted} students promoted.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                is SessionEvent.RevertComplete -> {
+                    Toast.makeText(
+                        context,
+                        "Session revert complete!",
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -156,67 +147,57 @@ fun AcademicSessionsScreen(
         }
     }
     
-    // Dialogs
-    if (showAddDialog) {
-        AddSessionDialog(
+    // First Session Dialog - Only shown when no sessions exist
+    if (showAddDialog && isFirstSession) {
+        AddFirstSessionDialog(
             sessionName = newSessionName,
             onSessionNameChange = { newSessionName = it },
             onDismiss = { showAddDialog = false; newSessionName = "" },
-            onConfirm = { viewModel.addSession(newSessionName) }
+            onConfirm = { viewModel.addFirstSession(newSessionName) }
         )
     }
     
-    if (state.showAddFeesDialog) {
-        AddFeesDialog(
-            sessionName = state.newSessionName,
-            addTuition = addTuition,
-            addTransport = addTransport,
-            isLoading = state.isAddingFees,
-            onTuitionChange = { addTuition = it },
-            onTransportChange = { addTransport = it },
-            onDismiss = { if (!state.isAddingFees) viewModel.dismissAddFeesDialog() },
-            onConfirm = { viewModel.addFeesForAllStudents(addTuition, addTransport) }
-        )
+    // Session Promotion Dialog
+    if (state.showPromotionWizard) {
+        val sourceSession = state.sessions.find { it.id == state.sourceSessionId }
+            ?: state.inactiveSessions.find { it.id == state.sourceSessionId }
+        val targetSession = state.sessions.find { it.id == state.targetSessionId }
+            ?: state.inactiveSessions.find { it.id == state.targetSessionId }
+        
+        if (sourceSession != null && targetSession != null) {
+            SessionPromotionDialog(
+                sourceSessionName = sourceSession.sessionName,
+                targetSessionName = targetSession.sessionName,
+                preview = state.promotionPreview,
+                progress = state.promotionProgress,
+                result = state.promotionResult,
+                isPromoting = state.isPromoting,
+                onExecute = { options -> viewModel.executePromotion(options) },
+                onDismiss = { viewModel.dismissPromotionWizard() }
+            )
+        }
     }
     
-    state.sessionToDuplicate?.let { session ->
-        DuplicateSessionDialog(
-            sourceSession = session,
-            onDismiss = { viewModel.dismissDuplicateDialog() },
-            onConfirm = { newName -> viewModel.duplicateSession(session, newName) }
-        )
-    }
-    
-    sessionToDeactivate?.let { session ->
-        ConfirmationDialog(
-            icon = Icons.Outlined.Archive,
-            iconColor = InactiveGray,
-            title = "Archive Session?",
-            message = "Session ${session.sessionName} will be archived. You can restore it later.",
-            confirmText = "Archive",
-            confirmColor = InactiveGray,
-            onConfirm = {
-                viewModel.deactivateSession(session.id)
-                sessionToDeactivate = null
-            },
-            onDismiss = { sessionToDeactivate = null }
-        )
-    }
-    
-    sessionToDelete?.let { session ->
-        ConfirmationDialog(
-            icon = Icons.Outlined.Delete,
-            iconColor = Color(0xFFE53935),
-            title = "Delete Permanently?",
-            message = "Session ${session.sessionName} will be permanently deleted. This cannot be undone.",
-            confirmText = "Delete",
-            confirmColor = Color(0xFFE53935),
-            onConfirm = {
-                viewModel.permanentlyDeleteSession(session.id)
-                sessionToDelete = null
-            },
-            onDismiss = { sessionToDelete = null }
-        )
+    // Revert Promotion Dialog
+    if (state.showRevertDialog) {
+        state.promotionToRevert?.let { promotion ->
+            val sourceSession = state.sessions.find { it.id == promotion.sourceSessionId }
+                ?: state.inactiveSessions.find { it.id == promotion.sourceSessionId }
+            val targetSession = state.sessions.find { it.id == promotion.targetSessionId }
+                ?: state.inactiveSessions.find { it.id == promotion.targetSessionId }
+            
+            RevertPromotionDialog(
+                promotion = promotion,
+                sourceSessionName = sourceSession?.sessionName ?: "Unknown",
+                targetSessionName = targetSession?.sessionName ?: "Unknown",
+                safetyCheck = state.revertSafetyCheck,
+                progress = state.revertProgress,
+                result = state.revertResult,
+                isReverting = state.isReverting,
+                onExecute = { forceDelete, reason -> viewModel.executeRevert(forceDelete, reason) },
+                onDismiss = { viewModel.dismissRevertDialog() }
+            )
+        }
     }
     
     Scaffold(
@@ -286,13 +267,16 @@ fun AcademicSessionsScreen(
                 )
             )
         },
+        // Only show FAB when no sessions exist (first time setup)
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = Saffron,
-                contentColor = Color.White
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Session")
+            if (isFirstSession) {
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = Saffron,
+                    contentColor = Color.White
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Session")
+                }
             }
         },
         containerColor = WarmBackground
@@ -345,9 +329,11 @@ fun AcademicSessionsScreen(
                         ) {
                             SessionCard(
                                 session = session,
+                                isPromoted = state.sessionPromotions.containsKey(session.id),
+                                isPreviousSession = isPreviousSession(session, state.sessions, state.sessionPromotions),
                                 onSetCurrent = { viewModel.setCurrentSession(session.id) },
-                                onArchive = { sessionToDeactivate = session },
-                                onDuplicate = { viewModel.showDuplicateDialog(session) }
+                                onPromote = { viewModel.startPromotionToNewSession(session) },
+                                onRevert = { viewModel.openRevertDialog(session) }
                             )
                         }
                     }
@@ -361,8 +347,8 @@ fun AcademicSessionsScreen(
                     }
                 }
                 
-                // Archived Sessions Section
-                if (state.inactiveSessions.isNotEmpty()) {
+                // Info note about session management
+                if (state.sessions.isNotEmpty()) {
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                     
                     item {
@@ -370,13 +356,7 @@ fun AcademicSessionsScreen(
                             visible = animateItems,
                             enter = fadeIn(tween(400, delayMillis = 300))
                         ) {
-                            ArchivedSessionsSection(
-                                sessions = state.inactiveSessions,
-                                isExpanded = state.showInactiveSessions,
-                                onToggleExpand = { viewModel.toggleShowInactiveSessions() },
-                                onReactivate = { viewModel.reactivateSession(it.id) },
-                                onDelete = { sessionToDelete = it }
-                            )
+                            SessionManagementNote()
                         }
                     }
                 }
@@ -599,9 +579,11 @@ private fun StatChip(
 @Composable
 private fun SessionCard(
     session: AcademicSession,
+    isPromoted: Boolean,
+    isPreviousSession: Boolean,
     onSetCurrent: () -> Unit,
-    onArchive: () -> Unit,
-    onDuplicate: () -> Unit
+    onPromote: () -> Unit,
+    onRevert: () -> Unit
 ) {
     val isCurrent = session.isCurrent
     
@@ -611,224 +593,274 @@ private fun SessionCard(
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Accent bar
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(if (isCurrent) SuccessGreen else AccentPurple)
-            )
-            
-            Spacer(modifier = Modifier.width(12.dp))
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = session.sessionName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (isCurrent) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = SuccessGreenLight
-                        ) {
-                            Text(
-                                text = "CURRENT",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = SuccessGreen,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${session.startDateFormatted} → ${session.endDateFormatted}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            
-            // Action buttons
-            if (!isCurrent) {
-                IconButton(
-                    onClick = onSetCurrent,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.CheckCircle,
-                        contentDescription = "Set Current",
-                        tint = SuccessGreen,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-            
-            IconButton(
-                onClick = onDuplicate,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    Icons.Outlined.ContentCopy,
-                    contentDescription = "Duplicate",
-                    tint = AccentPurple,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            
-            if (!isCurrent) {
-                IconButton(
-                    onClick = onArchive,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        Icons.Outlined.Archive,
-                        contentDescription = "Archive",
-                        tint = InactiveGray,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ==================== ARCHIVED SESSIONS SECTION ====================
-@Composable
-private fun ArchivedSessionsSection(
-    sessions: List<AcademicSession>,
-    isExpanded: Boolean,
-    onToggleExpand: () -> Unit,
-    onReactivate: (AcademicSession) -> Unit,
-    onDelete: (AcademicSession) -> Unit
-) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Card(
-            onClick = onToggleExpand,
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
+        Column {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.Archive,
-                        contentDescription = null,
-                        tint = InactiveGray,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Archived Sessions",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
+                // Accent bar
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(
+                            when {
+                                isCurrent -> SuccessGreen
+                                isPreviousSession -> AccentPurple
+                                else -> InactiveGray
+                            }
                         )
+                )
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${sessions.size} session${if (sessions.size != 1) "s" else ""}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = session.sessionName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        when {
+                            isCurrent -> {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = SuccessGreenLight
+                                ) {
+                                    Text(
+                                        text = "CURRENT",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SuccessGreen,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            isPreviousSession -> {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = AccentPurpleLight
+                                ) {
+                                    Text(
+                                        text = "PREVIOUS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AccentPurple,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            else -> {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = InactiveGrayLight
+                                ) {
+                                    Text(
+                                        text = "READ-ONLY",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = InactiveGray,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${session.startDateFormatted} → ${session.endDateFormatted}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                // Action buttons
+                if (!isCurrent) {
+                    IconButton(
+                        onClick = onSetCurrent,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            Icons.Outlined.CheckCircle,
+                            contentDescription = "Set Current",
+                            tint = SuccessGreen,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
-                Icon(
-                    if (isExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-        }
-        
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = expandVertically(tween(300)) + fadeIn(tween(300)),
-            exit = shrinkVertically(tween(300)) + fadeOut(tween(300))
-        ) {
-            Column(
-                modifier = Modifier.padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                sessions.forEach { session ->
-                    ArchivedSessionCard(
-                        session = session,
-                        onReactivate = { onReactivate(session) },
-                        onDelete = { onDelete(session) }
-                    )
+            
+            // Migrate button for current session
+            if (isCurrent) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
+                        .padding(bottom = 14.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = Saffron.copy(alpha = 0.1f)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .clickable { onPromote() }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = Saffron,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Migrate to Next Session",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SaffronDark
+                            )
+                            Text(
+                                text = "Promote students and create new academic year",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Saffron
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = Saffron,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+            
+            // Show promotion info and revert button if promoted
+            if (isPromoted) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
+                        .padding(bottom = 14.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    color = AccentPurpleLight
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Outlined.History,
+                            contentDescription = null,
+                            tint = AccentPurple,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Created via migration",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AccentPurple,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = onRevert,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Icon(
+                                Icons.Outlined.Undo,
+                                contentDescription = null,
+                                tint = Color(0xFFE53935),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Revert",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFE53935)
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+// ==================== SESSION MANAGEMENT NOTE ====================
 @Composable
-private fun ArchivedSessionCard(
-    session: AcademicSession,
-    onReactivate: () -> Unit,
-    onDelete: () -> Unit
-) {
+private fun SessionManagementNote() {
     Card(
+        modifier = Modifier.padding(horizontal = 16.dp),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Icon(
+                Icons.Outlined.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
                 Text(
-                    text = session.sessionName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = InactiveGray
+                    text = "Session Management",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
                 )
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "${session.startDateFormatted} - ${session.endDateFormatted}",
+                    text = "To create a new academic session, use the \"Migrate to Next Session\" option from the current session. This will promote all students to their next class and set up fees for the new year.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            
-            IconButton(onClick = onReactivate, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Outlined.Restore,
-                    contentDescription = "Restore",
-                    tint = SuccessGreen,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    Icons.Outlined.Delete,
-                    contentDescription = "Delete",
-                    tint = Color(0xFFE53935),
-                    modifier = Modifier.size(18.dp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "• Current: Full access to all features\n• Previous: Can add/edit receipts (auto-adjusts balances)\n• Older: Read-only for historical reference",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
+}
+
+// Helper function to check if session is the previous session (one before current)
+// Uses promotion records first (accurate), then falls back to date-based sorting (for legacy data)
+private fun isPreviousSession(
+    session: AcademicSession, 
+    allSessions: List<AcademicSession>,
+    promotions: Map<Long, com.navoditpublic.fees.domain.model.SessionPromotion> = emptyMap()
+): Boolean {
+    val currentSession = allSessions.find { it.isCurrent } ?: return false
+    if (session.isCurrent) return false
+    
+    // First check: Was the current session promoted from this session?
+    val currentPromotion = promotions[currentSession.id]
+    if (currentPromotion != null) {
+        return currentPromotion.sourceSessionId == session.id
+    }
+    
+    // Fallback for legacy data: Use date-based sorting
+    val sortedSessions = allSessions.sortedByDescending { it.startDate }
+    val currentIndex = sortedSessions.indexOfFirst { it.isCurrent }
+    
+    // Previous session is the one right after current in the sorted list
+    return currentIndex >= 0 && 
+           currentIndex + 1 < sortedSessions.size && 
+           sortedSessions[currentIndex + 1].id == session.id
 }
 
 // ==================== EMPTY STATE ====================
@@ -938,51 +970,7 @@ private fun NoResultsState(query: String) {
 
 // ==================== DIALOGS ====================
 @Composable
-private fun ConfirmationDialog(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconColor: Color,
-    title: String,
-    message: String,
-    confirmText: String,
-    confirmColor: Color,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(iconColor.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, null, tint = iconColor, modifier = Modifier.size(24.dp))
-            }
-        },
-        title = { 
-            Text(title, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        },
-        text = { 
-            Text(message, textAlign = TextAlign.Center)
-        },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = confirmColor),
-                shape = RoundedCornerShape(10.dp)
-            ) { Text(confirmText) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-        shape = RoundedCornerShape(20.dp)
-    )
-}
-
-@Composable
-private fun AddSessionDialog(
+private fun AddFirstSessionDialog(
     sessionName: String,
     onSessionNameChange: (String) -> Unit,
     onDismiss: () -> Unit,
@@ -1013,16 +1001,24 @@ private fun AddSessionDialog(
             }
         },
         title = { 
-            Text("Add New Session", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Text("Create Your First Session", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         },
         text = {
             Column {
-                val addSessionFocusManager = LocalFocusManager.current
+                Text(
+                    text = "This will be your starting academic session. Future sessions will be created through migration.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                val focusManager = LocalFocusManager.current
                 OutlinedTextField(
                     value = sessionName,
                     onValueChange = onSessionNameChange,
                     label = { Text("Session Name") },
-                    placeholder = { Text("e.g., 2025-26") },
+                    placeholder = { Text("e.g., 2024-25") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -1031,7 +1027,7 @@ private fun AddSessionDialog(
                             if (sessionName.isNotBlank()) {
                                 onConfirm()
                             }
-                            addSessionFocusManager.clearFocus()
+                            focusManager.clearFocus()
                         }
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -1061,7 +1057,7 @@ private fun AddSessionDialog(
                     }
                 } else {
                     Text(
-                        text = "Enter session in format: 2025-26",
+                        text = "Enter session in format: 2024-25",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1074,223 +1070,10 @@ private fun AddSessionDialog(
                 enabled = sessionName.isNotBlank(),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Saffron)
-            ) { Text("Add Session") }
+            ) { Text("Create Session") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-        shape = RoundedCornerShape(20.dp)
-    )
-}
-
-@Composable
-private fun DuplicateSessionDialog(
-    sourceSession: AcademicSession,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    val suggestedName = remember(sourceSession) {
-        try {
-            val parts = sourceSession.sessionName.split("-")
-            val startYear = parts[0].toInt() + 1
-            val endYearShort = (startYear + 1).toString().takeLast(2)
-            "$startYear-$endYearShort"
-        } catch (e: Exception) { "" }
-    }
-    
-    var newSessionName by remember { mutableStateOf(suggestedName) }
-    
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(AccentPurple.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Outlined.ContentCopy, null, tint = AccentPurple, modifier = Modifier.size(24.dp))
-            }
-        },
-        title = { 
-            Text("Duplicate Session", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        },
-        text = {
-            Column {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("From:", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.width(8.dp))
-                        Text(sourceSession.sessionName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = AccentPurple)
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                val duplicateFocusManager = LocalFocusManager.current
-                OutlinedTextField(
-                    value = newSessionName,
-                    onValueChange = { newSessionName = it },
-                    label = { Text("New Session Name") },
-                    placeholder = { Text("e.g., 2026-27") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            if (newSessionName.isNotBlank() && newSessionName != sourceSession.sessionName) {
-                                onConfirm(newSessionName)
-                            }
-                            duplicateFocusManager.clearFocus()
-                        }
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(newSessionName) },
-                enabled = newSessionName.isNotBlank() && newSessionName != sourceSession.sessionName,
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentPurple)
-            ) {
-                Icon(Icons.Outlined.ContentCopy, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Duplicate")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-        shape = RoundedCornerShape(20.dp)
-    )
-}
-
-@Composable
-private fun AddFeesDialog(
-    sessionName: String,
-    addTuition: Boolean,
-    addTransport: Boolean,
-    isLoading: Boolean,
-    onTuitionChange: (Boolean) -> Unit,
-    onTransportChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(SuccessGreen.copy(alpha = 0.1f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Outlined.CheckCircle, null, tint = SuccessGreen, modifier = Modifier.size(24.dp))
-            }
-        },
-        title = { 
-            Text("Session Created!", fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        },
-        text = {
-            Column {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = SuccessGreenLight,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = sessionName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SuccessGreen,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-                
-                Spacer(modifier = Modifier.height(14.dp))
-                
-                Text("Add session fees for all students?", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                Text("Creates ledger entries dated April 1", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // Tuition checkbox
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .clickable(enabled = !isLoading) { onTuitionChange(!addTuition) }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(checked = addTuition, onCheckedChange = { if (!isLoading) onTuitionChange(it) }, enabled = !isLoading)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Tuition Fee", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            Text("12 months, based on class fee structure", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // Transport checkbox
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .clickable(enabled = !isLoading) { onTransportChange(!addTransport) }
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(checked = addTransport, onCheckedChange = { if (!isLoading) onTransportChange(it) }, enabled = !isLoading)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Transport Fee", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                            Text("11 months, June excluded", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                
-                if (isLoading) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Saffron)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("Adding fees...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                enabled = !isLoading && (addTuition || addTransport),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Saffron)
-            ) {
-                Icon(Icons.Outlined.Payment, null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Add Fees")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !isLoading) { Text("Skip") }
         },
         shape = RoundedCornerShape(20.dp)
     )

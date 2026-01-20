@@ -11,8 +11,11 @@ import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -28,8 +31,21 @@ data class StudentDetailState(
     val admissionSessionName: String = "",
     val recentReceipts: List<Receipt> = emptyList(),
     val recentLedgerEntries: List<LedgerEntry> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    
+    // Status management state
+    val canDelete: Boolean = false,
+    val showInactiveDialog: Boolean = false,
+    val showReactivateDialog: Boolean = false,
+    val showDeleteDialog: Boolean = false,
+    val showCannotDeleteDialog: Boolean = false,
+    val isProcessing: Boolean = false
 )
+
+sealed class StudentDetailEvent {
+    data object StudentDeleted : StudentDetailEvent()
+    data class ShowToast(val message: String) : StudentDetailEvent()
+}
 
 @HiltViewModel
 class StudentDetailViewModel @Inject constructor(
@@ -43,6 +59,9 @@ class StudentDetailViewModel @Inject constructor(
     
     private val _state = MutableStateFlow(StudentDetailState())
     val state: StateFlow<StudentDetailState> = _state.asStateFlow()
+    
+    private val _events = MutableSharedFlow<StudentDetailEvent>()
+    val events: SharedFlow<StudentDetailEvent> = _events.asSharedFlow()
     
     init {
         loadStudentDetails()
@@ -83,6 +102,10 @@ class StudentDetailViewModel @Inject constructor(
                     feeRepository.getTotalCredits(studentId)
                 }
                 
+                val canDeleteDeferred = async {
+                    feeRepository.canDeleteStudent(studentId)
+                }
+                
                 // Await all results
                 val transportRoute = transportRouteDeferred.await()
                 val admissionSession = admissionSessionDeferred.await()
@@ -90,6 +113,7 @@ class StudentDetailViewModel @Inject constructor(
                 val balance = balanceDeferred.await()
                 val totalDebits = totalDebitsDeferred.await()
                 val totalCredits = totalCreditsDeferred.await()
+                val canDelete = canDeleteDeferred.await()
                 
                 _state.value = StudentDetailState(
                     isLoading = false,
@@ -99,9 +123,10 @@ class StudentDetailViewModel @Inject constructor(
                     totalCredits = totalCredits,
                     transportRoute = transportRoute,
                     admissionSessionName = admissionSessionName,
-                    recentReceipts = emptyList(), // Removed - not displayed on screen
-                    recentLedgerEntries = emptyList(), // Removed - not displayed on screen
-                    error = null
+                    recentReceipts = emptyList(),
+                    recentLedgerEntries = emptyList(),
+                    error = null,
+                    canDelete = canDelete
                 )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
@@ -114,6 +139,103 @@ class StudentDetailViewModel @Inject constructor(
     
     fun refresh() {
         loadStudentDetails()
+    }
+    
+    // ========== Dialog Controls ==========
+    
+    fun showInactiveDialog() {
+        _state.value = _state.value.copy(showInactiveDialog = true)
+    }
+    
+    fun dismissInactiveDialog() {
+        _state.value = _state.value.copy(showInactiveDialog = false)
+    }
+    
+    fun showReactivateDialog() {
+        _state.value = _state.value.copy(showReactivateDialog = true)
+    }
+    
+    fun dismissReactivateDialog() {
+        _state.value = _state.value.copy(showReactivateDialog = false)
+    }
+    
+    fun showDeleteDialog() {
+        if (_state.value.canDelete) {
+            _state.value = _state.value.copy(showDeleteDialog = true)
+        } else {
+            _state.value = _state.value.copy(showCannotDeleteDialog = true)
+        }
+    }
+    
+    fun dismissDeleteDialog() {
+        _state.value = _state.value.copy(showDeleteDialog = false)
+    }
+    
+    fun dismissCannotDeleteDialog() {
+        _state.value = _state.value.copy(showCannotDeleteDialog = false)
+    }
+    
+    // ========== Actions ==========
+    
+    fun markInactive() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isProcessing = true, showInactiveDialog = false)
+            
+            studentRepository.markInactive(studentId)
+                .onSuccess {
+                    _events.emit(StudentDetailEvent.ShowToast("Student marked as inactive"))
+                    loadStudentDetails()
+                }
+                .onFailure { e ->
+                    _events.emit(StudentDetailEvent.ShowToast("Failed: ${e.message}"))
+                }
+            
+            _state.value = _state.value.copy(isProcessing = false)
+        }
+    }
+    
+    fun reactivate() {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isProcessing = true, showReactivateDialog = false)
+            
+            studentRepository.reactivate(studentId)
+                .onSuccess {
+                    _events.emit(StudentDetailEvent.ShowToast("Student reactivated"))
+                    loadStudentDetails()
+                }
+                .onFailure { e ->
+                    _events.emit(StudentDetailEvent.ShowToast("Failed: ${e.message}"))
+                }
+            
+            _state.value = _state.value.copy(isProcessing = false)
+        }
+    }
+    
+    fun deleteStudent() {
+        val student = _state.value.student ?: return
+        
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isProcessing = true, showDeleteDialog = false)
+            
+            // Re-verify canDelete before proceeding (race condition safeguard)
+            val canStillDelete = feeRepository.canDeleteStudent(studentId)
+            if (!canStillDelete) {
+                _events.emit(StudentDetailEvent.ShowToast("Cannot delete: Student now has financial records"))
+                _state.value = _state.value.copy(isProcessing = false, canDelete = false)
+                return@launch
+            }
+            
+            studentRepository.hardDelete(student)
+                .onSuccess {
+                    _events.emit(StudentDetailEvent.ShowToast("Student deleted permanently"))
+                    _events.emit(StudentDetailEvent.StudentDeleted)
+                }
+                .onFailure { e ->
+                    _events.emit(StudentDetailEvent.ShowToast("Failed: ${e.message}"))
+                }
+            
+            _state.value = _state.value.copy(isProcessing = false)
+        }
     }
 }
 

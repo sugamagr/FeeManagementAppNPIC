@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 7,
-    "identityHash": "9be3c68c446b6c70a8d3aa54ed04c24e",
+    "version": 8,
+    "identityHash": "c7e23b3daf28cfb20fb06c6c225e1c86",
     "entities": [
       {
         "tableName": "students",
@@ -188,14 +188,13 @@
             "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_students_sr_number` ON `${TABLE_NAME}` (`sr_number`)"
           },
           {
-            "name": "index_students_current_class_account_number",
+            "name": "index_students_account_number",
             "unique": true,
             "columnNames": [
-              "current_class",
               "account_number"
             ],
             "orders": [],
-            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_students_current_class_account_number` ON `${TABLE_NAME}` (`current_class`, `account_number`)"
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_students_account_number` ON `${TABLE_NAME}` (`account_number`)"
           },
           {
             "name": "index_students_current_class",
@@ -1494,12 +1493,203 @@
         },
         "indices": [],
         "foreignKeys": []
+      },
+      {
+        "tableName": "session_promotions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `source_session_id` INTEGER NOT NULL, `target_session_id` INTEGER NOT NULL, `status` TEXT NOT NULL, `copied_fee_structures` INTEGER NOT NULL, `carried_forward_dues` INTEGER NOT NULL, `promoted_classes` INTEGER NOT NULL, `deactivated_12th_students` INTEGER NOT NULL, `added_tuition_fees` INTEGER NOT NULL, `added_transport_fees` INTEGER NOT NULL, `set_as_current` INTEGER NOT NULL, `fee_structures_copied_count` INTEGER NOT NULL, `students_with_dues_carried` INTEGER NOT NULL, `total_dues_carried_forward` REAL NOT NULL, `students_promoted` INTEGER NOT NULL, `students_deactivated` INTEGER NOT NULL, `students_with_fees_added` INTEGER NOT NULL, `total_fees_added` REAL NOT NULL, `promoted_at` INTEGER NOT NULL, `reverted_at` INTEGER, `revert_reason` TEXT, FOREIGN KEY(`source_session_id`) REFERENCES `academic_sessions`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`target_session_id`) REFERENCES `academic_sessions`(`id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceSessionId",
+            "columnName": "source_session_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetSessionId",
+            "columnName": "target_session_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "copiedFeeStructures",
+            "columnName": "copied_fee_structures",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "carriedForwardDues",
+            "columnName": "carried_forward_dues",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "promotedClasses",
+            "columnName": "promoted_classes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deactivated12thStudents",
+            "columnName": "deactivated_12th_students",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedTuitionFees",
+            "columnName": "added_tuition_fees",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedTransportFees",
+            "columnName": "added_transport_fees",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setAsCurrent",
+            "columnName": "set_as_current",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "feeStructuresCopiedCount",
+            "columnName": "fee_structures_copied_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "studentsWithDuesCarried",
+            "columnName": "students_with_dues_carried",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalDuesCarriedForward",
+            "columnName": "total_dues_carried_forward",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "studentsPromoted",
+            "columnName": "students_promoted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "studentsDeactivated",
+            "columnName": "students_deactivated",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "studentsWithFeesAdded",
+            "columnName": "students_with_fees_added",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalFeesAdded",
+            "columnName": "total_fees_added",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "promotedAt",
+            "columnName": "promoted_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revertedAt",
+            "columnName": "reverted_at",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "revertReason",
+            "columnName": "revert_reason",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_session_promotions_source_session_id",
+            "unique": false,
+            "columnNames": [
+              "source_session_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_session_promotions_source_session_id` ON `${TABLE_NAME}` (`source_session_id`)"
+          },
+          {
+            "name": "index_session_promotions_target_session_id",
+            "unique": false,
+            "columnNames": [
+              "target_session_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_session_promotions_target_session_id` ON `${TABLE_NAME}` (`target_session_id`)"
+          },
+          {
+            "name": "index_session_promotions_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_session_promotions_status` ON `${TABLE_NAME}` (`status`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "academic_sessions",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "source_session_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "academic_sessions",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "target_session_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
       }
     ],
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9be3c68c446b6c70a8d3aa54ed04c24e')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c7e23b3daf28cfb20fb06c6c225e1c86')"
     ]
   }
 }

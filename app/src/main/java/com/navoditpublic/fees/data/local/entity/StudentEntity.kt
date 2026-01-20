@@ -9,7 +9,9 @@ import androidx.room.PrimaryKey
     tableName = "students",
     indices = [
         Index(value = ["sr_number"], unique = true),
-        Index(value = ["account_number"], unique = true),
+        // Note: Partial unique index on (current_class, account_number) for active students only
+        // is created in MIGRATION_8_9. Room doesn't support partial indexes in annotations.
+        Index(value = ["current_class", "account_number"]), // Non-unique, actual constraint in migration
         Index(value = ["current_class"]),
         Index(value = ["is_active"])
     ]

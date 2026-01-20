@@ -25,6 +25,7 @@ data class StudentsState(
     val sections: List<String> = emptyList(),
     val classSummaries: List<ClassSummary> = emptyList(),
     val totalStudentCount: Int = 0,
+    val inactiveStudentCount: Int = 0,
     val totalDues: Double = 0.0,
     val error: String? = null
 )
@@ -57,9 +58,11 @@ class StudentsViewModel @Inject constructor(
                     sections = sections
                 )
                 
-                // Load students with balance
-                studentRepository.getStudentsWithBalance().collect { studentsWithBalance ->
-                    val classSummaries = buildClassSummaries(studentsWithBalance)
+                // Load ALL students (including inactive) with balance
+                studentRepository.getAllStudentsWithBalance().collect { studentsWithBalance ->
+                    val activeStudents = studentsWithBalance.filter { it.student.isActive }
+                    val inactiveCount = studentsWithBalance.count { !it.student.isActive }
+                    val classSummaries = buildClassSummaries(activeStudents) // Class summaries only for active
                     val filtered = filterStudents(
                         studentsWithBalance,
                         _state.value.searchQuery,
@@ -72,7 +75,8 @@ class StudentsViewModel @Inject constructor(
                         filteredStudents = filtered,
                         classSummaries = classSummaries,
                         totalStudentCount = studentsWithBalance.size,
-                        totalDues = studentsWithBalance.sumOf { maxOf(0.0, it.currentBalance) },
+                        inactiveStudentCount = inactiveCount,
+                        totalDues = activeStudents.sumOf { maxOf(0.0, it.currentBalance) }, // Only active students for dues
                         error = null
                     )
                 }

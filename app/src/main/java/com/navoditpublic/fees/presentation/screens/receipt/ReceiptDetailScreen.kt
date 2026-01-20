@@ -32,16 +32,22 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.Numbers
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +57,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -76,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.navoditpublic.fees.data.local.entity.PaymentMode
+import com.navoditpublic.fees.domain.usecase.SessionAccessLevel
 import com.navoditpublic.fees.presentation.components.LoadingScreen
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.Saffron
@@ -132,8 +140,83 @@ fun ReceiptDetailScreen(
                 is ReceiptDetailEvent.Error -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
                 }
+                is ReceiptDetailEvent.BalanceAdjusted -> {
+                    Toast.makeText(
+                        context, 
+                        "Opening balance adjusted to ₹${String.format("%.0f", event.newBalance)}", 
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
+    }
+    
+    // Session Warning Dialog
+    if (state.showSessionWarning) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissSessionWarning() },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = Color.White,
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFFF3E0)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9800),
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            },
+            title = {
+                Text(
+                    "Previous Session",
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Text(
+                    text = state.sessionWarningMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    color = Color.Gray
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.dismissSessionWarning() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Saffron),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("I Understand", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+    }
+    
+    // Edit Receipt Dialog
+    if (state.isEditMode) {
+        EditReceiptDialog(
+            currentAmount = state.editAmount,
+            paymentMode = state.editPaymentMode,
+            onlineReference = state.editOnlineReference,
+            remarks = state.editRemarks,
+            isSaving = state.isSaving,
+            isPreviousSession = state.sessionAccessLevel == SessionAccessLevel.PREVIOUS_SESSION,
+            onAmountChange = { viewModel.updateEditAmount(it) },
+            onPaymentModeChange = { viewModel.updateEditPaymentMode(it) },
+            onOnlineReferenceChange = { viewModel.updateEditOnlineReference(it) },
+            onRemarksChange = { viewModel.updateEditRemarks(it) },
+            onSave = { viewModel.saveEdit() },
+            onDismiss = { viewModel.exitEditMode() }
+        )
     }
     
     // Cancel Dialog
@@ -319,28 +402,99 @@ fun ReceiptDetailScreen(
                         }
                     }
                     
-                    // Cancel Button
+                    // Action Buttons (Edit & Cancel)
                     if (!isCancelled) {
                         item {
                             AnimatedVisibility(
                                 visible = animateContent,
                                 enter = fadeIn(tween(150, 150)) + slideInVertically(tween(150, 150)) { 30 }
                             ) {
-                                Button(
-                                    onClick = { showCancelDialog = true },
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp, vertical = 16.dp),
-                                    shape = RoundedCornerShape(14.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = CancelledRed.copy(alpha = 0.1f),
-                                        contentColor = CancelledRed
-                                    ),
-                                    contentPadding = PaddingValues(vertical = 16.dp)
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Icon(Icons.Default.Cancel, contentDescription = null)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Cancel This Receipt", fontWeight = FontWeight.SemiBold)
+                                    // Session access indicator
+                                    if (state.sessionAccessLevel != SessionAccessLevel.FULL_ACCESS) {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = when (state.sessionAccessLevel) {
+                                                SessionAccessLevel.PREVIOUS_SESSION -> Color(0xFFFFF3E0)
+                                                SessionAccessLevel.READ_ONLY -> CancelledRedLight
+                                                else -> Color.Transparent
+                                            }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Info,
+                                                    contentDescription = null,
+                                                    tint = when (state.sessionAccessLevel) {
+                                                        SessionAccessLevel.PREVIOUS_SESSION -> Color(0xFFFF9800)
+                                                        SessionAccessLevel.READ_ONLY -> CancelledRed
+                                                        else -> Color.Gray
+                                                    },
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                                Spacer(Modifier.width(8.dp))
+                                                Text(
+                                                    text = when (state.sessionAccessLevel) {
+                                                        SessionAccessLevel.PREVIOUS_SESSION -> 
+                                                            "Previous session - changes will auto-adjust opening balance"
+                                                        SessionAccessLevel.READ_ONLY -> 
+                                                            "Read-only - this session cannot be edited"
+                                                        else -> ""
+                                                    },
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = when (state.sessionAccessLevel) {
+                                                        SessionAccessLevel.PREVIOUS_SESSION -> Color(0xFFE65100)
+                                                        SessionAccessLevel.READ_ONLY -> CancelledRed
+                                                        else -> Color.Gray
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Edit Button (disabled for read-only sessions)
+                                    if (state.sessionAccessLevel != SessionAccessLevel.READ_ONLY) {
+                                        Button(
+                                            onClick = { viewModel.enterEditMode() },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(14.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = OnlineBlue.copy(alpha = 0.1f),
+                                                contentColor = OnlineBlue
+                                            ),
+                                            contentPadding = PaddingValues(vertical = 16.dp)
+                                        ) {
+                                            Icon(Icons.Default.Edit, contentDescription = null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Edit Receipt", fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                    
+                                    // Cancel Button (disabled for read-only sessions)
+                                    if (state.sessionAccessLevel != SessionAccessLevel.READ_ONLY) {
+                                        Button(
+                                            onClick = { showCancelDialog = true },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(14.dp),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = CancelledRed.copy(alpha = 0.1f),
+                                                contentColor = CancelledRed
+                                            ),
+                                            contentPadding = PaddingValues(vertical = 16.dp)
+                                        ) {
+                                            Icon(Icons.Default.Cancel, contentDescription = null)
+                                            Spacer(Modifier.width(8.dp))
+                                            Text("Cancel This Receipt", fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -973,4 +1127,224 @@ private fun CancellationReasonCard(
             }
         }
     }
+}
+
+// ============================================================================
+// EDIT RECEIPT DIALOG
+// ============================================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditReceiptDialog(
+    currentAmount: String,
+    paymentMode: PaymentMode,
+    onlineReference: String,
+    remarks: String,
+    isSaving: Boolean,
+    isPreviousSession: Boolean,
+    onAmountChange: (String) -> Unit,
+    onPaymentModeChange: (PaymentMode) -> Unit,
+    onOnlineReferenceChange: (String) -> Unit,
+    onRemarksChange: (String) -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    
+    AlertDialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color.White,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(OnlineBlueLight),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = OnlineBlue,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    "Edit Receipt",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Previous session warning
+                if (isPreviousSession) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFFFF3E0)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFFF9800),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Opening balance will be automatically adjusted",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFFE65100)
+                            )
+                        }
+                    }
+                }
+                
+                // Amount Field
+                OutlinedTextField(
+                    value = currentAmount,
+                    onValueChange = onAmountChange,
+                    label = { Text("Amount (₹)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Next
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.clearFocus() }
+                    ),
+                    singleLine = true,
+                    leadingIcon = {
+                        Text(
+                            "₹",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Saffron
+                        )
+                    }
+                )
+                
+                // Payment Mode
+                Text(
+                    text = "Payment Mode",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.Gray
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    FilterChip(
+                        selected = paymentMode == PaymentMode.CASH,
+                        onClick = { onPaymentModeChange(PaymentMode.CASH) },
+                        label = { Text("Cash") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Money,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = CashGreenLight,
+                            selectedLabelColor = CashGreen,
+                            selectedLeadingIconColor = CashGreen
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = paymentMode == PaymentMode.ONLINE,
+                        onClick = { onPaymentModeChange(PaymentMode.ONLINE) },
+                        label = { Text("Online") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.CreditCard,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = OnlineBlueLight,
+                            selectedLabelColor = OnlineBlue,
+                            selectedLeadingIconColor = OnlineBlue
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                
+                // Online Reference (if online mode)
+                if (paymentMode == PaymentMode.ONLINE) {
+                    OutlinedTextField(
+                        value = onlineReference,
+                        onValueChange = onOnlineReferenceChange,
+                        label = { Text("Reference Number") },
+                        placeholder = { Text("Transaction ID / UPI Ref") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+                }
+                
+                // Remarks
+                OutlinedTextField(
+                    value = remarks,
+                    onValueChange = onRemarksChange,
+                    label = { Text("Remarks / Particulars") },
+                    placeholder = { Text("e.g., April-June Tuition") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    maxLines = 2,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(
+                        onDone = { focusManager.clearFocus() }
+                    )
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onSave,
+                enabled = !isSaving && currentAmount.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = Saffron),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    if (isSaving) "Saving..." else "Save Changes",
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSaving,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Cancel", color = Color.Gray)
+            }
+        }
+    )
 }

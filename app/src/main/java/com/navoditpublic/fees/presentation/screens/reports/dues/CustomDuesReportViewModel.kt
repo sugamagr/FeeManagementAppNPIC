@@ -245,7 +245,10 @@ class CustomDuesReportViewModel @Inject constructor(
             DuesReportSortOption.NAME_Z_TO_A -> filtered.sortedByDescending { it.student.name.lowercase() }
             DuesReportSortOption.CLASS_ASC -> filtered.sortedBy { it.student.currentClass }
             DuesReportSortOption.CLASS_DESC -> filtered.sortedByDescending { it.student.currentClass }
-            DuesReportSortOption.ACCOUNT_NUMBER -> filtered.sortedBy { it.student.accountNumber }
+            // Numeric sorting for account numbers (1, 2, 10 instead of 1, 10, 2)
+            DuesReportSortOption.ACCOUNT_NUMBER -> filtered.sortedWith(
+                compareBy { it.student.accountNumber.toIntOrNull() ?: Int.MAX_VALUE }
+            )
         }
         
         _state.value = _state.value.copy(filteredStudents = sorted)

@@ -14,6 +14,8 @@ import com.navoditpublic.fees.domain.repository.AuditRepository
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.domain.usecase.AutoAdjustOpeningBalanceUseCase
+import com.navoditpublic.fees.domain.usecase.SessionAccessLevel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,12 +84,17 @@ data class CollectFeeState(
     val total: Double = 0.0,
     val remainingDues: Double = 0.0,
     
+    // Session access
+    val sessionAccessLevel: SessionAccessLevel = SessionAccessLevel.FULL_ACCESS,
+    val showSessionWarning: Boolean = false,
+    
     val error: String? = null
 )
 
 sealed class CollectFeeEvent {
     data object Success : CollectFeeEvent()
     data class Error(val message: String) : CollectFeeEvent()
+    data class BalanceAdjusted(val newBalance: Double) : CollectFeeEvent()
 }
 
 @HiltViewModel
@@ -96,7 +103,8 @@ class CollectFeeViewModel @Inject constructor(
     private val studentRepository: StudentRepository,
     private val feeRepository: FeeRepository,
     private val settingsRepository: SettingsRepository,
-    private val auditRepository: AuditRepository
+    private val auditRepository: AuditRepository,
+    private val autoAdjustUseCase: AutoAdjustOpeningBalanceUseCase
 ) : ViewModel() {
     
     private val preSelectedStudentId: Long? = savedStateHandle.get<String>("studentId")?.toLongOrNull()
@@ -114,6 +122,10 @@ class CollectFeeViewModel @Inject constructor(
         loadInitialData()
     }
     
+    fun dismissSessionWarning() {
+        _state.value = _state.value.copy(showSessionWarning = false)
+    }
+    
     private fun loadInitialData() {
         viewModelScope.launch {
             try {
@@ -122,6 +134,9 @@ class CollectFeeViewModel @Inject constructor(
                 // Get current session
                 val currentSession = settingsRepository.getCurrentSession()
                 currentSessionId = currentSession?.id ?: 0
+                
+                // Check session access level
+                val accessLevel = autoAdjustUseCase.getSessionAccessLevel(currentSessionId)
                 
                 // Load all students for scrolling selection with current balance from ledger
                 val allStudents = studentRepository.getAllActiveStudents().first().map { student ->
@@ -133,7 +148,9 @@ class CollectFeeViewModel @Inject constructor(
                 _state.value = _state.value.copy(
                     isLoading = false,
                     receiptNumber = "",  // Empty - user must enter manually
-                    allStudents = allStudents
+                    allStudents = allStudents,
+                    sessionAccessLevel = accessLevel,
+                    showSessionWarning = accessLevel == SessionAccessLevel.PREVIOUS_SESSION
                 )
                 
                 // Pre-select student if provided
@@ -478,6 +495,18 @@ class CollectFeeViewModel @Inject constructor(
                         entityId = receiptId,
                         entityName = "Receipt #$receiptNumber"
                     )
+                    
+                    // Auto-adjust opening balance if this is in a previous session
+                    if (_state.value.sessionAccessLevel == SessionAccessLevel.PREVIOUS_SESSION) {
+                        autoAdjustUseCase.adjustOpeningBalance(
+                            studentId = student.id,
+                            sourceSessionId = currentSessionId
+                        ).onSuccess { newBalance ->
+                            if (newBalance != null) {
+                                _events.emit(CollectFeeEvent.BalanceAdjusted(newBalance))
+                            }
+                        }
+                    }
                     
                     _events.emit(CollectFeeEvent.Success)
                 }.onFailure { e ->

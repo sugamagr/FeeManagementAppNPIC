@@ -6,6 +6,7 @@ import com.navoditpublic.fees.data.local.entity.FeeType
 import com.navoditpublic.fees.data.local.entity.LedgerEntryType
 import com.navoditpublic.fees.data.local.entity.LedgerReferenceType
 import com.navoditpublic.fees.data.local.entity.PaymentMode
+import com.navoditpublic.fees.data.local.entity.PromotionStatus
 
 class Converters {
     
@@ -62,6 +63,17 @@ class Converters {
         AuditAction.valueOf(value)
     } catch (e: IllegalArgumentException) {
         AuditAction.UPDATE // Default fallback
+    }
+    
+    // PromotionStatus converters
+    @TypeConverter
+    fun fromPromotionStatus(value: PromotionStatus): String = value.name
+    
+    @TypeConverter
+    fun toPromotionStatus(value: String): PromotionStatus = try {
+        PromotionStatus.valueOf(value)
+    } catch (e: IllegalArgumentException) {
+        PromotionStatus.COMPLETED // Default fallback
     }
 }
 

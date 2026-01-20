@@ -88,6 +88,20 @@ interface FeeStructureDao {
     
     @Query("SELECT COUNT(*) FROM fee_structure WHERE session_id = :sessionId")
     suspend fun getCountForSession(sessionId: Long): Int
+    
+    // ========== Session Promotion Methods ==========
+    
+    /**
+     * Get all fee structures for a session (for copying to new session)
+     */
+    @Query("SELECT * FROM fee_structure WHERE session_id = :sessionId AND is_active = 1")
+    suspend fun getAllFeeStructuresForSession(sessionId: Long): List<FeeStructureEntity>
+    
+    /**
+     * Delete all fee structures for a session (for revert)
+     */
+    @Query("DELETE FROM fee_structure WHERE session_id = :sessionId")
+    suspend fun deleteFeeStructuresForSession(sessionId: Long): Int
 }
 
 
