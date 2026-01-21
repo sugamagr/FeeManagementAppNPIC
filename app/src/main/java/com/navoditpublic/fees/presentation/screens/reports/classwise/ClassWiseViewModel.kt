@@ -6,6 +6,7 @@ import com.navoditpublic.fees.domain.model.Student
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.util.ClassUtils
 import com.navoditpublic.fees.util.ReminderTemplate
 import com.navoditpublic.fees.util.ReminderTemplateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -90,7 +91,10 @@ data class ClassWiseState(
     val selectedClassForReminder: ClassSummary? = null,
     val reminderTemplates: List<ReminderTemplate> = emptyList(),
     val selectedTemplate: ReminderTemplate? = null,
-    val canAddMoreTemplates: Boolean = true
+    val canAddMoreTemplates: Boolean = true,
+    
+    // Error state
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -226,22 +230,9 @@ class ClassWiseViewModel @Inject constructor(
     }
     
     private fun getClassSortOrder(className: String): Int {
+        // Use unified class ordering from ClassUtils
         val baseName = className.split("-").first().trim()
-        return when (baseName.uppercase()) {
-            "NC", "NURSERY" -> 0
-            "LKG" -> 1
-            "UKG" -> 2
-            else -> {
-                val num = baseName
-                    .replace("ST", "", ignoreCase = true)
-                    .replace("ND", "", ignoreCase = true)
-                    .replace("RD", "", ignoreCase = true)
-                    .replace("TH", "", ignoreCase = true)
-                    .trim()
-                    .toIntOrNull()
-                (num ?: 0) + 3
-            }
-        }
+        return ClassUtils.getClassOrder(baseName)
     }
     
     private fun loadData() {
@@ -314,7 +305,11 @@ class ClassWiseViewModel @Inject constructor(
                     canAddMoreTemplates = _state.value.canAddMoreTemplates
                 )
             } catch (e: Exception) {
-                _state.value = _state.value.copy(isLoading = false)
+                android.util.Log.e("ClassWiseViewModel", "Failed to load class-wise data", e)
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to load class-wise report"
+                )
             }
         }
     }

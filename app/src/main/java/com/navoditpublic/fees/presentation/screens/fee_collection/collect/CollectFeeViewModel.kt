@@ -156,9 +156,12 @@ class CollectFeeViewModel @Inject constructor(
                 // Pre-select student if provided
                 if (preSelectedStudentId != null) {
                     val student = studentRepository.getById(preSelectedStudentId)
-                    if (student != null) {
+                    if (student != null && student.isActive) {
                         val balance = feeRepository.getCurrentBalance(preSelectedStudentId)
                         selectStudent(StudentWithBalance(student, balance))
+                    } else if (student != null && !student.isActive) {
+                        // Cannot collect fees for inactive students
+                        _events.emit(CollectFeeEvent.Error("Cannot collect fees for inactive student"))
                     }
                 }
             } catch (e: Exception) {
@@ -438,7 +441,10 @@ class CollectFeeViewModel @Inject constructor(
                 if (_state.value.isFullYearPayment && monthlyFeeAmount > 0) {
                     val minimumForFullYear = monthlyFeeAmount * 11
                     if (amount < minimumForFullYear) {
-                        _events.emit(CollectFeeEvent.Error("Full year discount requires minimum payment of ₹${minimumForFullYear.toInt()} (11 months tuition)"))
+                        _events.emit(CollectFeeEvent.Error(
+                            "Full year discount requires minimum payment of ₹${minimumForFullYear.toInt()} (11 months). " +
+                            "Pay 11 months, get 1 month free!"
+                        ))
                         return@launch
                     }
                 }

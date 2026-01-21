@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.util.ClassUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,11 +42,6 @@ class LedgerMainViewModel @Inject constructor(
     private val _state = MutableStateFlow(LedgerMainState())
     val state: StateFlow<LedgerMainState> = _state.asStateFlow()
     
-    private val classOrder = listOf(
-        "NC", "LKG", "UKG", "1st", "2nd", "3rd", "4th", "5th", 
-        "6th", "7th", "8th", "9th", "10th", "11th", "12th"
-    )
-    
     init {
         loadData()
     }
@@ -68,7 +64,7 @@ class LedgerMainViewModel @Inject constructor(
                 var grandTotalPaid = 0.0
                 var totalWithDues = 0
                 
-                for (className in classOrder) {
+                for (className in ClassUtils.ALL_CLASSES) {
                     val students = studentsByClass[className] ?: continue
                     if (students.isEmpty()) continue
                     

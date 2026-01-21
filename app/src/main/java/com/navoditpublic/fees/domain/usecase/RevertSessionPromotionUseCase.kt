@@ -44,8 +44,21 @@ class RevertSessionPromotionUseCase @Inject constructor(
             warnings.add("${studentsAdded.size} students added after promotion will be permanently deleted")
         }
         
-        // Can revert safely only if no changes were made
-        val canRevertSafely = receiptsCount == 0 && studentsAdded.isEmpty()
+        // Check for account number conflicts if 12th students were deactivated
+        var accountNumberConflicts = 0
+        if (promotion.deactivated12thStudents) {
+            val sourceSession = settingsRepository.getSessionById(promotion.sourceSessionId)
+            if (sourceSession != null) {
+                accountNumberConflicts = studentRepository.getPassedOutStudentsWithConflictsCount(sourceSession.sessionName)
+                if (accountNumberConflicts > 0) {
+                    warnings.add("$accountNumberConflicts passed-out students have account number conflicts with new students")
+                }
+            }
+        }
+        
+        // Can revert safely only if no changes were made AND no account number conflicts exist
+        // Account number conflicts would cause database constraint violations during reactivation
+        val canRevertSafely = receiptsCount == 0 && studentsAdded.isEmpty() && accountNumberConflicts == 0
         
         if (!canRevertSafely) {
             warnings.add("This action cannot be undone!")
@@ -56,6 +69,7 @@ class RevertSessionPromotionUseCase @Inject constructor(
             receiptsInNewSession = receiptsCount,
             receiptsAmount = receiptsAmount,
             studentsAddedAfterPromotion = studentsAdded.size,
+            accountNumberConflicts = accountNumberConflicts,
             warnings = warnings
         )
     }

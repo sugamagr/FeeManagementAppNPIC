@@ -102,6 +102,15 @@ interface StudentRepository {
     suspend fun reactivatePassedOutStudentsAndRestoreAccountNumbers(sessionName: String): Int
     
     /**
+     * Get count of passed-out students whose original account numbers conflict with existing active students.
+     * Used to determine if safe reactivation is possible during promotion revert.
+     * 
+     * @param sessionName The session name to identify which prefix to check
+     * @return Number of students with conflicts
+     */
+    suspend fun getPassedOutStudentsWithConflictsCount(sessionName: String): Int
+    
+    /**
      * Get class-wise student counts
      */
     suspend fun getClassWiseStudentCounts(): Map<String, Int>

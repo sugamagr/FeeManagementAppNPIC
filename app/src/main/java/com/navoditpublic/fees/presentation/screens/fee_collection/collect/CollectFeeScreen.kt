@@ -145,6 +145,7 @@ import com.navoditpublic.fees.presentation.theme.PaidChipText
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronDark
 import com.navoditpublic.fees.presentation.theme.SaffronLight
+import com.navoditpublic.fees.util.ClassUtils
 import com.navoditpublic.fees.util.DateUtils
 import com.navoditpublic.fees.util.NumberToWords
 import com.navoditpublic.fees.util.toRupees
@@ -842,7 +843,7 @@ private fun StudentSelectionFullScreen(
             .map { it.student.classSection }
             .distinct()
             .sortedWith(compareBy(
-                { classOrder(it.substringBefore("-").trim()) },
+                { ClassUtils.getClassOrder(it.substringBefore("-").trim()) },
                 { it.substringAfter("-", "A").trim() }
             ))
     }
@@ -881,7 +882,7 @@ private fun StudentSelectionFullScreen(
         
         when (effectiveSortOption) {
             SortOption.BY_CLASS -> baseList.sortedWith(compareBy(
-                { classOrder(it.student.currentClass) },
+                { ClassUtils.getClassOrder(it.student.currentClass) },
                 { it.student.section },
                 { it.student.name }
             ))
@@ -1130,27 +1131,6 @@ private fun StudentSelectionFullScreen(
     }
 }
 
-// Helper function to order classes correctly
-private fun classOrder(className: String): Int {
-    return when (className.uppercase().trim()) {
-        "NC" -> 0
-        "LKG" -> 1
-        "UKG" -> 2
-        "1ST" -> 3
-        "2ND" -> 4
-        "3RD" -> 5
-        "4TH" -> 6
-        "5TH" -> 7
-        "6TH" -> 8
-        "7TH" -> 9
-        "8TH" -> 10
-        "9TH" -> 11
-        "10TH" -> 12
-        "11TH" -> 13
-        "12TH" -> 14
-        else -> 99
-    }
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1164,7 +1144,7 @@ private fun ClassPickerDialog(
     // Group class-sections by class
     val groupedClasses = remember(classSections) {
         classSections.groupBy { it.substringBefore("-").trim() }
-            .toSortedMap(compareBy { classOrder(it) })
+            .toSortedMap(compareBy { ClassUtils.getClassOrder(it) })
     }
     
     // Calculate totals for all students

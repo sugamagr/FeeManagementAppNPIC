@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.util.ClassUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -81,7 +82,9 @@ data class DefaultersState(
     val availableClasses: List<String> = emptyList(),
     // Stats
     val averageDue: Double = 0.0,
-    val highestDue: Double = 0.0
+    val highestDue: Double = 0.0,
+    // Error state
+    val error: String? = null
 )
 
 @HiltViewModel
@@ -157,12 +160,17 @@ class DefaultersViewModel @Inject constructor(
                     allDefaulters = defaultersList,
                     totalDues = totalDues,
                     averageDue = averageDue,
-                    highestDue = highestDue
+                    highestDue = highestDue,
+                    error = null  // Clear any previous error on successful load
                 )
                 
                 applyFilters()
             } catch (e: Exception) {
-                _state.value = _state.value.copy(isLoading = false)
+                android.util.Log.e("DefaultersViewModel", "Failed to load defaulters data", e)
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to load defaulters report"
+                )
             }
         }
     }
@@ -235,15 +243,7 @@ class DefaultersViewModel @Inject constructor(
     }
     
     private fun getClassOrder(className: String): Int {
-        return when (className.uppercase()) {
-            "NURSERY", "NUR" -> 0
-            "LKG", "L.K.G" -> 1
-            "UKG", "U.K.G" -> 2
-            else -> {
-                val numStr = className.filter { it.isDigit() }
-                numStr.toIntOrNull()?.plus(2) ?: 100
-            }
-        }
+        return ClassUtils.getClassOrder(className)
     }
     
     fun refresh() {

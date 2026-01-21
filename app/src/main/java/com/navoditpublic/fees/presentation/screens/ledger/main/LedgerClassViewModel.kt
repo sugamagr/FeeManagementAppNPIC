@@ -128,9 +128,10 @@ class LedgerClassViewModel @Inject constructor(
                     error = null
                 )
             } catch (e: Exception) {
+                android.util.Log.e("LedgerClassViewModel", "Failed to load ledger data for class $className", e)
                 _state.value = _state.value.copy(
                     isLoading = false,
-                    error = e.message
+                    error = e.message ?: "Failed to load ledger data"
                 )
             }
         }

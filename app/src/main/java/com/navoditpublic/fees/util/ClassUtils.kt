@@ -90,6 +90,45 @@ object ClassUtils {
     }
     
     /**
+     * Get class order for sorting - handles various class name formats.
+     * Returns 0 for NC/Nursery, 1 for LKG, 2 for UKG, 3 for 1st, etc.
+     * Returns 100 for unknown classes (sorts to end).
+     * 
+     * Handles formats like: "NC", "NURSERY", "LKG", "L.K.G", "1st", "1ST", "1", etc.
+     */
+    fun getClassOrder(className: String): Int {
+        val normalized = className.uppercase().trim()
+            .replace(".", "")  // Remove dots (L.K.G -> LKG)
+            .replace(" ", "")  // Remove spaces
+        
+        return when {
+            // Nursery variants
+            normalized == "NC" || normalized == "NURSERY" || normalized == "NUR" -> 0
+            // LKG variants
+            normalized == "LKG" || normalized == "LOWERKINDERGARTEN" -> 1
+            // UKG variants
+            normalized == "UKG" || normalized == "UPPERKINDERGARTEN" -> 2
+            // Numeric classes (1st through 12th)
+            else -> {
+                // Extract the numeric part
+                val numericPart = normalized
+                    .replace("ST", "")
+                    .replace("ND", "")
+                    .replace("RD", "")
+                    .replace("TH", "")
+                    .filter { it.isDigit() }
+                    .toIntOrNull()
+                
+                if (numericPart != null && numericPart in 1..12) {
+                    numericPart + 2  // 1st = 3, 2nd = 4, ..., 12th = 14
+                } else {
+                    100  // Unknown class, sort to end
+                }
+            }
+        }
+    }
+    
+    /**
      * Classes that can be promoted (all except 12th)
      */
     val PROMOTABLE_CLASSES = ALL_CLASSES.filter { it != "12th" }

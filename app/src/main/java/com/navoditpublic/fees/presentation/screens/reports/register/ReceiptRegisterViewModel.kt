@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.data.local.entity.PaymentMode
 import com.navoditpublic.fees.domain.model.ReceiptWithStudent
 import com.navoditpublic.fees.domain.repository.FeeRepository
+import com.navoditpublic.fees.util.ClassUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -163,7 +164,7 @@ class ReceiptRegisterViewModel @Inject constructor(
                 val classes = sortedReceipts
                     .map { it.studentClass }
                     .distinct()
-                    .sortedWith(compareBy { getClassSortOrder(it) })
+                    .sortedWith(compareBy { ClassUtils.getClassOrder(it) })
                 
                 _state.value = _state.value.copy(
                     isLoading = false,
@@ -289,27 +290,6 @@ class ReceiptRegisterViewModel @Inject constructor(
             datePreset = DatePreset.CUSTOM
         )
         loadData()
-    }
-    
-    private fun getClassSortOrder(className: String): Int {
-        return when (className.uppercase()) {
-            "NC" -> 0
-            "LKG" -> 1
-            "UKG" -> 2
-            "1ST" -> 3
-            "2ND" -> 4
-            "3RD" -> 5
-            "4TH" -> 6
-            "5TH" -> 7
-            "6TH" -> 8
-            "7TH" -> 9
-            "8TH" -> 10
-            "9TH" -> 11
-            "10TH" -> 12
-            "11TH" -> 13
-            "12TH" -> 14
-            else -> 100
-        }
     }
     
     // For export - clean numbers without formatting for Excel compatibility

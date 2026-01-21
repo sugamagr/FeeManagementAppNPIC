@@ -576,7 +576,15 @@ class AddEditStudentViewModel @Inject constructor(
     
     fun updatePhonePrimary(value: String) {
         val filtered = value.filter { it.isDigit() }.take(10)
-        _state.value = _state.value.copy(phonePrimary = filtered, phonePrimaryError = null)
+        // Validate phone number: must be 10 digits and start with 6, 7, 8, or 9 (valid Indian mobile)
+        val error = when {
+            filtered.isEmpty() -> null // Optional field - no error if empty
+            filtered.length < 10 -> "Phone number must be 10 digits"
+            !filtered.first().let { it == '6' || it == '7' || it == '8' || it == '9' } -> 
+                "Phone number must start with 6, 7, 8, or 9"
+            else -> null
+        }
+        _state.value = _state.value.copy(phonePrimary = filtered, phonePrimaryError = error)
         scheduleDraftSave()
     }
     
@@ -608,7 +616,13 @@ class AddEditStudentViewModel @Inject constructor(
     
     fun updatePincode(value: String) {
         val filtered = value.filter { it.isDigit() }.take(6)
-        _state.value = _state.value.copy(pincode = filtered, pincodeError = null)
+        // Validate pincode: must be exactly 6 digits if provided
+        val error = when {
+            filtered.isEmpty() -> null // Optional field - no error if empty
+            filtered.length < 6 -> "Pincode must be 6 digits"
+            else -> null
+        }
+        _state.value = _state.value.copy(pincode = filtered, pincodeError = error)
         scheduleDraftSave()
     }
     

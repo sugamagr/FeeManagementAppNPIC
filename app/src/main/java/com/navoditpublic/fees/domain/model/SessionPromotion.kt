@@ -126,7 +126,8 @@ data class PromotionResult(
     val studentsPromoted: Int = 0,
     val totalFeesAdded: Double = 0.0,
     val studentsWithFeesAdded: Int = 0,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val warnings: List<String> = emptyList()
 )
 
 /**
@@ -150,6 +151,7 @@ data class RevertSafetyCheck(
     val receiptsInNewSession: Int = 0,
     val receiptsAmount: Double = 0.0,
     val studentsAddedAfterPromotion: Int = 0,
+    val accountNumberConflicts: Int = 0,
     val warnings: List<String> = emptyList()
 )
 

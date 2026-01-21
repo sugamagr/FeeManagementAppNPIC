@@ -115,29 +115,35 @@ interface LedgerDao {
     suspend fun reverseEntriesForReceipt(receiptId: Long)
     
     /**
-     * Get total pending dues across all students.
+     * Get total pending dues across all ACTIVE students.
      * Only counts students with positive balances (excludes overpayments).
+     * Joins with students table to exclude inactive students from totals.
      * This uses a subquery to calculate each student's balance first,
      * then sums only the positive balances to match defaulters calculation.
      */
     @Query("""
         SELECT SUM(student_balance) FROM (
-            SELECT student_id,
-                   SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
-                   SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END) as student_balance
-            FROM ledger_entries
-            WHERE is_reversed = 0
-            GROUP BY student_id
+            SELECT le.student_id,
+                   SUM(CASE WHEN le.entry_type = 'DEBIT' THEN le.debit_amount ELSE 0 END) -
+                   SUM(CASE WHEN le.entry_type = 'CREDIT' THEN le.credit_amount ELSE 0 END) as student_balance
+            FROM ledger_entries le
+            INNER JOIN students s ON le.student_id = s.id AND s.is_active = 1
+            WHERE le.is_reversed = 0
+            GROUP BY le.student_id
             HAVING student_balance > 0
         )
     """)
     fun getTotalPendingDues(): Flow<Double?>
     
+    /**
+     * Get IDs of ACTIVE students with pending dues.
+     */
     @Query("""
-        SELECT student_id FROM ledger_entries 
-        WHERE is_reversed = 0 
-        GROUP BY student_id 
-        HAVING SUM(debit_amount) - SUM(credit_amount) > 0
+        SELECT le.student_id FROM ledger_entries le
+        INNER JOIN students s ON le.student_id = s.id AND s.is_active = 1
+        WHERE le.is_reversed = 0 
+        GROUP BY le.student_id 
+        HAVING SUM(le.debit_amount) - SUM(le.credit_amount) > 0
     """)
     fun getStudentIdsWithDues(): Flow<List<Long>>
     
@@ -226,31 +232,35 @@ interface LedgerDao {
     suspend fun getStudentsWithPositiveBalance(): List<StudentBalance>
     
     /**
-     * Get count of students with positive balance
+     * Get count of ACTIVE students with positive balance.
+     * Joins with students table to exclude inactive students.
      */
     @Query("""
         SELECT COUNT(*) FROM (
-            SELECT student_id
-            FROM ledger_entries
-            WHERE is_reversed = 0
-            GROUP BY student_id
-            HAVING SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
-                   SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END) > 0
+            SELECT le.student_id
+            FROM ledger_entries le
+            INNER JOIN students s ON le.student_id = s.id AND s.is_active = 1
+            WHERE le.is_reversed = 0
+            GROUP BY le.student_id
+            HAVING SUM(CASE WHEN le.entry_type = 'DEBIT' THEN le.debit_amount ELSE 0 END) -
+                   SUM(CASE WHEN le.entry_type = 'CREDIT' THEN le.credit_amount ELSE 0 END) > 0
         )
     """)
     suspend fun getStudentsWithDuesCount(): Int
     
     /**
-     * Get total pending dues across all students
+     * Get total pending dues across all ACTIVE students (sync version).
+     * Joins with students table to exclude inactive students from totals.
      */
     @Query("""
         SELECT COALESCE(SUM(balance), 0.0) FROM (
-            SELECT student_id,
-                   SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
-                   SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END) as balance
-            FROM ledger_entries
-            WHERE is_reversed = 0
-            GROUP BY student_id
+            SELECT le.student_id,
+                   SUM(CASE WHEN le.entry_type = 'DEBIT' THEN le.debit_amount ELSE 0 END) -
+                   SUM(CASE WHEN le.entry_type = 'CREDIT' THEN le.credit_amount ELSE 0 END) as balance
+            FROM ledger_entries le
+            INNER JOIN students s ON le.student_id = s.id AND s.is_active = 1
+            WHERE le.is_reversed = 0
+            GROUP BY le.student_id
             HAVING balance > 0
         )
     """)

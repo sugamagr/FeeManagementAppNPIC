@@ -470,20 +470,23 @@ fun StudentDetailScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        PremiumActionButton(
-                            text = "Collect Fee",
-                            icon = Icons.Default.Payment,
-                            isPrimary = true,
-                            onClick = { 
-                                navController.navigate(Screen.CollectFee.createRoute(studentId))
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
+                        // Only show Collect Fee button for active students
+                        if (student.isActive) {
+                            PremiumActionButton(
+                                text = "Collect Fee",
+                                icon = Icons.Default.Payment,
+                                isPrimary = true,
+                                onClick = { 
+                                    navController.navigate(Screen.CollectFee.createRoute(studentId))
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                         
                         PremiumActionButton(
                             text = "View Ledger",
                             icon = Icons.Default.Receipt,
-                            isPrimary = false,
+                            isPrimary = !student.isActive, // Make primary if Collect Fee is hidden
                             onClick = { 
                                 navController.navigate(Screen.StudentLedger.createRoute(studentId))
                             },

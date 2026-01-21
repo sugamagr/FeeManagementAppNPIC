@@ -230,6 +230,30 @@ interface StudentDao {
     ): Int
     
     /**
+     * Get passed-out students whose restored account numbers would conflict with existing active students.
+     * Used during promotion revert to identify collision cases.
+     * 
+     * @param sessionPrefix The PASS prefix (e.g., "PASS2425-")
+     * @param className The class to check conflicts in (usually "12th")
+     */
+    @Query("""
+        SELECT deactivated.* FROM students deactivated 
+        WHERE deactivated.is_active = 0 
+        AND deactivated.current_class = :className
+        AND deactivated.account_number LIKE :sessionPrefix || '%'
+        AND EXISTS (
+            SELECT 1 FROM students active 
+            WHERE active.is_active = 1 
+            AND active.current_class = :className
+            AND active.account_number = SUBSTR(deactivated.account_number, LENGTH(:sessionPrefix) + 1)
+        )
+    """)
+    suspend fun getPassedOutStudentsWithAccountNumberConflicts(
+        sessionPrefix: String,
+        className: String = "12th"
+    ): List<StudentEntity>
+    
+    /**
      * Get count of active students per class
      */
     @Query("""

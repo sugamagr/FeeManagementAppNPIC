@@ -200,7 +200,15 @@ class StudentDetailViewModel @Inject constructor(
             
             studentRepository.reactivate(studentId)
                 .onSuccess {
-                    _events.emit(StudentDetailEvent.ShowToast("Student reactivated"))
+                    // Check if student had transport before - warn staff to verify
+                    val student = _state.value.student
+                    if (student?.hasTransport == true || student?.transportRouteId != null) {
+                        _events.emit(StudentDetailEvent.ShowToast(
+                            "Student reactivated! ⚠️ IMPORTANT: Go to Transport Quick screen from home to verify this student's transport enrollment is correct."
+                        ))
+                    } else {
+                        _events.emit(StudentDetailEvent.ShowToast("Student reactivated successfully"))
+                    }
                     loadStudentDetails()
                 }
                 .onFailure { e ->

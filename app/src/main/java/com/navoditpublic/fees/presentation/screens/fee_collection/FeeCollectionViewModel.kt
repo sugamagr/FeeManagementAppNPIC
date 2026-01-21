@@ -101,15 +101,21 @@ class FeeCollectionViewModel @Inject constructor(
                     feeRepository.getRecentReceiptsWithStudents(200) // Get more for filtering
                 ) { todayTotal, weekTotal, monthTotal, yesterdayTotal, receipts ->
                     
-                    // Calculate counts
+                    // Calculate counts - exclude cancelled receipts for accurate statistics
                     val todayReceipts = receipts.filter { 
-                        it.receipt.receiptDate >= todayStart && it.receipt.receiptDate <= todayEnd 
+                        it.receipt.receiptDate >= todayStart && 
+                        it.receipt.receiptDate <= todayEnd &&
+                        !it.receipt.isCancelled
                     }
                     val weekReceipts = receipts.filter { 
-                        it.receipt.receiptDate >= weekStart && it.receipt.receiptDate <= todayEnd 
+                        it.receipt.receiptDate >= weekStart && 
+                        it.receipt.receiptDate <= todayEnd &&
+                        !it.receipt.isCancelled
                     }
                     val monthReceipts = receipts.filter { 
-                        it.receipt.receiptDate >= monthStart && it.receipt.receiptDate <= todayEnd 
+                        it.receipt.receiptDate >= monthStart && 
+                        it.receipt.receiptDate <= todayEnd &&
+                        !it.receipt.isCancelled
                     }
                     
                     val cashReceipts = receipts.filter { 

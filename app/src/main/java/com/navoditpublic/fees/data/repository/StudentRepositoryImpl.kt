@@ -170,6 +170,11 @@ class StudentRepositoryImpl @Inject constructor(
         return studentDao.reactivatePassedOutStudentsAndRestoreAccountNumbers(prefix)
     }
     
+    override suspend fun getPassedOutStudentsWithConflictsCount(sessionName: String): Int {
+        val prefix = ClassUtils.getPassedOutPrefix(sessionName)
+        return studentDao.getPassedOutStudentsWithAccountNumberConflicts(prefix, "12th").size
+    }
+    
     override suspend fun getClassWiseStudentCounts(): Map<String, Int> {
         return studentDao.getClassWiseStudentCounts().associate { it.className to it.count }
     }

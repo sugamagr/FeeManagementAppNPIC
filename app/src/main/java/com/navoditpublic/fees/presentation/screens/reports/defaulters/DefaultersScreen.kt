@@ -94,6 +94,7 @@ import com.navoditpublic.fees.presentation.components.LoadingScreen
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronDark
+import com.navoditpublic.fees.util.ClassUtils
 import com.navoditpublic.fees.util.DateUtils
 import com.navoditpublic.fees.util.ExcelGenerator
 import com.navoditpublic.fees.util.PdfGenerator
@@ -653,7 +654,7 @@ private fun ClassFilterSection(
     // Sort classes properly
     val sortedClasses = availableClasses
         .filter { it != "All" }
-        .sortedWith(compareBy { getClassSortOrder(it) })
+        .sortedWith(compareBy { ClassUtils.getClassOrder(it) })
     
     // Split into two rows
     val midPoint = (sortedClasses.size + 1) / 2 + 1 // +1 for "All" in first row
@@ -1389,31 +1390,6 @@ private fun formatPhoneForWhatsApp(phone: String): String {
         digitsOnly.length == 10 -> "91$digitsOnly"
         // Other cases - return as is
         else -> digitsOnly
-    }
-}
-
-/**
- * Returns sort order for class names
- * Handles: Nursery, LKG, UKG, 1st-12th, with optional sections (A, B, C)
- * Examples: "Nursery" -> 0, "LKG" -> 1, "UKG" -> 2, "1st" -> 3, "1st-A" -> 3, "10th-B" -> 12
- */
-private fun getClassSortOrder(className: String): Int {
-    val upperName = className.uppercase().trim()
-    
-    // Pre-primary classes
-    return when {
-        upperName.startsWith("NUR") || upperName == "NC" -> 0
-        upperName.startsWith("LKG") || upperName.startsWith("L.K.G") || upperName == "LK" -> 1
-        upperName.startsWith("UKG") || upperName.startsWith("U.K.G") || upperName == "UK" -> 2
-        upperName.startsWith("PREP") || upperName.startsWith("KG") -> 1
-        else -> {
-            // Extract number from class name (handles "1st", "2nd", "10th", "10th-A", "10-A", etc.)
-            val numberStr = upperName.replace(Regex("[^0-9]"), "")
-            val classNumber = numberStr.toIntOrNull() ?: 100
-            
-            // Add 2 to account for pre-primary (0=Nur, 1=LKG, 2=UKG, 3=1st, 4=2nd, etc.)
-            classNumber + 2
-        }
     }
 }
 

@@ -8,6 +8,7 @@ import com.navoditpublic.fees.domain.model.TransportRoute
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
 import com.navoditpublic.fees.domain.repository.TransportEnrollmentRepository
+import com.navoditpublic.fees.util.ClassUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -217,27 +218,10 @@ class TransportQuickViewModel @Inject constructor(
     }
     
     /**
-     * Helper to get class order for sorting
+     * Helper to get class order for sorting - uses unified ClassUtils
      */
     private fun classOrder(className: String): Int {
-        return when (className.uppercase()) {
-            "NC" -> 0
-            "LKG" -> 1
-            "UKG" -> 2
-            "1ST" -> 3
-            "2ND" -> 4
-            "3RD" -> 5
-            "4TH" -> 6
-            "5TH" -> 7
-            "6TH" -> 8
-            "7TH" -> 9
-            "8TH" -> 10
-            "9TH" -> 11
-            "10TH" -> 12
-            "11TH" -> 13
-            "12TH" -> 14
-            else -> 99
-        }
+        return ClassUtils.getClassOrder(className)
     }
     
     private fun applyEnrollFilters() {

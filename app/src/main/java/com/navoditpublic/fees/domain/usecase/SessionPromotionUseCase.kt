@@ -199,8 +199,11 @@ class SessionPromotionUseCase @Inject constructor(
             
             settingsRepository.saveSessionPromotion(promotion).onFailure { e ->
                 // Non-critical: promotion succeeded but record wasn't saved
-                // Log but don't fail the whole operation
+                // Log and add warning to result
                 android.util.Log.e("SessionPromotion", "Failed to save promotion record: ${e.message}")
+                result = result.copy(
+                    warnings = result.warnings + "Promotion record could not be saved. Re-promoting this session may cause issues."
+                )
             }
             
             onProgress(PromotionProgress("Promotion complete!", 100, isComplete = true))

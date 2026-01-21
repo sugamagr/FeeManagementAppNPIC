@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.data.local.dao.ClassSectionDao
 import com.navoditpublic.fees.domain.repository.SettingsRepository
+import com.navoditpublic.fees.util.ClassUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,18 +86,7 @@ class ClassesSectionsViewModel @Inject constructor(
                 val grouped = classSections
                     .groupBy { it.className }
                     .mapValues { entry -> entry.value.map { it.sectionName }.sorted() }
-                    .toSortedMap(compareBy { 
-                        // Custom sorting for classes
-                        when (it) {
-                            "NC" -> 0
-                            "LKG" -> 1
-                            "UKG" -> 2
-                            else -> {
-                                val num = it.replace("st", "").replace("nd", "").replace("rd", "").replace("th", "").toIntOrNull()
-                                (num ?: 0) + 3
-                            }
-                        }
-                    })
+                    .toSortedMap(compareBy { ClassUtils.getClassOrder(it) })
                 
                 // Build enhanced class info with student counts
                 val classInfoList = grouped.map { (className, sections) ->
