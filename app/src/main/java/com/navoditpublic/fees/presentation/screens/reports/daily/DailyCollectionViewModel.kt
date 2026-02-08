@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.data.local.entity.PaymentMode
 import com.navoditpublic.fees.domain.model.ReceiptWithStudent
 import com.navoditpublic.fees.domain.repository.FeeRepository
+import com.navoditpublic.fees.domain.session.SelectedSessionInfo
+import com.navoditpublic.fees.domain.session.SelectedSessionManager
 import com.navoditpublic.fees.util.ClassUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,7 +45,10 @@ data class DailyCollectionState(
     val paymentModeFilter: PaymentModeFilter = PaymentModeFilter.ALL,
     val sortOption: ReceiptSortOption = ReceiptSortOption.NEWEST_FIRST,
     val classes: List<String> = emptyList(),
-    val selectedClass: String = "All"
+    val selectedClass: String = "All",
+    // Session viewing state
+    val selectedSessionInfo: SelectedSessionInfo? = null,
+    val isViewingCurrentSession: Boolean = true
 )
 
 private fun getStartOfDay(timestamp: Long): Long {
@@ -68,7 +73,8 @@ private fun getEndOfDay(timestamp: Long): Long {
 
 @HiltViewModel
 class DailyCollectionViewModel @Inject constructor(
-    private val feeRepository: FeeRepository
+    private val feeRepository: FeeRepository,
+    private val selectedSessionManager: SelectedSessionManager
 ) : ViewModel() {
     
     private val _state = MutableStateFlow(DailyCollectionState())
@@ -76,6 +82,23 @@ class DailyCollectionViewModel @Inject constructor(
     
     init {
         loadData()
+        observeSelectedSession()
+    }
+    
+    private fun observeSelectedSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectedSessionInfo.collect { sessionInfo ->
+                val isViewingCurrent = sessionInfo?.isCurrentSession ?: true
+                _state.value = _state.value.copy(
+                    selectedSessionInfo = sessionInfo,
+                    isViewingCurrentSession = isViewingCurrent
+                )
+                // Reload data when session changes
+                if (sessionInfo != null) {
+                    loadData()
+                }
+            }
+        }
     }
     
     private fun loadData() {
@@ -84,9 +107,16 @@ class DailyCollectionViewModel @Inject constructor(
             
             val startOfDay = _state.value.selectedDate
             val endOfDay = getEndOfDay(startOfDay)
+            val selectedInfo = selectedSessionManager.selectedSessionInfo.value
             
             feeRepository.getReceiptsWithStudentsByDateRange(startOfDay, endOfDay).collect { receiptsWithStudents ->
-                val activeReceipts = receiptsWithStudents.filter { !it.receipt.isCancelled }
+                // Filter by session if viewing historical session
+                val sessionFiltered = if (selectedInfo != null && !selectedInfo.isCurrentSession) {
+                    receiptsWithStudents.filter { it.receipt.sessionId == selectedInfo.session.id }
+                } else {
+                    receiptsWithStudents
+                }
+                val activeReceipts = sessionFiltered.filter { !it.receipt.isCancelled }
                 val total = activeReceipts.sumOf { it.receipt.netAmount }
                 val byPaymentMode = activeReceipts
                     .groupBy { it.receipt.paymentMode.name }
@@ -188,6 +218,15 @@ class DailyCollectionViewModel @Inject constructor(
                 add(Calendar.DAY_OF_MONTH, 1)
             }.timeInMillis
             setDate(newDate)
+        }
+    }
+    
+    /**
+     * Switch back to viewing the current session.
+     */
+    fun switchToCurrentSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectCurrentSession()
         }
     }
 }

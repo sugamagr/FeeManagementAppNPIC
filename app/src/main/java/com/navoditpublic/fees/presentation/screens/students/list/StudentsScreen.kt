@@ -147,6 +147,7 @@ import com.navoditpublic.fees.presentation.components.BalanceChip
 import com.navoditpublic.fees.presentation.components.EmptyState
 import com.navoditpublic.fees.presentation.components.LoadingScreen
 import com.navoditpublic.fees.presentation.components.SearchBar
+import com.navoditpublic.fees.presentation.components.SessionBannerCompact
 import com.navoditpublic.fees.presentation.navigation.LocalDrawerState
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.*
@@ -194,6 +195,15 @@ fun StudentsScreen(
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onAddClick = { navController.navigate(Screen.AddEditStudent.createRoute()) }
                 )
+                
+                // Session Banner (when viewing historical session)
+                if (!state.isViewingCurrentSession && state.selectedSessionInfo != null) {
+                    SessionBannerCompact(
+                        sessionInfo = state.selectedSessionInfo,
+                        onSwitchClick = { navController.navigate(Screen.AcademicSessions.route) },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
                 
                 // Show search results if searching
                 if (state.searchQuery.length >= 2) {

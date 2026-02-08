@@ -262,6 +262,25 @@ interface FeeRepository {
      */
     suspend fun getTotalPendingDuesSync(): Double
     
+    // ========== Session-Based Viewing Methods ==========
+    
+    /**
+     * Get all student IDs who have ledger entries in a specific session.
+     * Used for viewing historical session data.
+     */
+    suspend fun getStudentIdsWithEntriesInSession(sessionId: Long): List<Long>
+    
+    /**
+     * Get total pending dues for a specific session only.
+     * Only considers active students and entries for that session.
+     */
+    suspend fun getTotalPendingDuesForSession(sessionId: Long): Double
+    
+    /**
+     * Get count of students with dues in a specific session.
+     */
+    suspend fun getStudentsWithDuesCountForSession(sessionId: Long): Int
+    
     /**
      * Get count of receipts in a session
      */

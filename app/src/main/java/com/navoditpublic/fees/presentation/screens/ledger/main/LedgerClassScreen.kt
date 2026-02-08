@@ -96,6 +96,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.navoditpublic.fees.presentation.components.LoadingScreen
+import com.navoditpublic.fees.presentation.components.SessionBannerCompact
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.AdvanceChipBackground
 import com.navoditpublic.fees.presentation.theme.AdvanceChipText
@@ -310,6 +311,15 @@ fun LedgerClassScreen(
                         
                         // Spacer for floating card
                         item { Spacer(modifier = Modifier.height(36.dp)) }
+                        
+                        // Session Banner (shows when viewing historical session)
+                        item {
+                            SessionBannerCompact(
+                                sessionInfo = state.selectedSessionInfo,
+                                onSwitchClick = { navController.navigate(Screen.AcademicSessions.route) },
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
                         
                         // Search Bar
                         item {

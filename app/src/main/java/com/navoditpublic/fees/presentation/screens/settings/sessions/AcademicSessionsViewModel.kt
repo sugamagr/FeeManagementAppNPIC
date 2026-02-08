@@ -13,7 +13,9 @@ import com.navoditpublic.fees.domain.model.SessionPromotion
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.domain.session.SelectedSessionManager
 import com.navoditpublic.fees.domain.usecase.RevertSessionPromotionUseCase
+import com.navoditpublic.fees.domain.usecase.SessionAccessLevel
 import com.navoditpublic.fees.domain.usecase.SessionPromotionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -55,6 +57,15 @@ data class AcademicSessionsState(
     // Animation trigger
     val animateItems: Boolean = false,
     
+    // Session Selection (for viewing historical data)
+    val showSessionSelectionDialog: Boolean = false,
+    val sessionToSelect: AcademicSession? = null,
+    val sessionSelectionAccessLevel: SessionAccessLevel = SessionAccessLevel.FULL_ACCESS,
+    
+    // Session Creation Restriction
+    val canCreateNewSession: Boolean = false,
+    val createSessionBlockedMessage: String? = null,
+    
     // Session Promotion
     val showPromotionWizard: Boolean = false,
     val sourceSessionId: Long? = null,
@@ -78,6 +89,7 @@ sealed class SessionEvent {
     data class Error(val message: String) : SessionEvent()
     data class PromotionComplete(val result: PromotionResult) : SessionEvent()
     data class RevertComplete(val result: RevertResult) : SessionEvent()
+    data class SessionSelected(val session: AcademicSession) : SessionEvent()
 }
 
 @HiltViewModel
@@ -86,7 +98,8 @@ class AcademicSessionsViewModel @Inject constructor(
     private val feeRepository: FeeRepository,
     private val studentRepository: StudentRepository,
     private val sessionPromotionUseCase: SessionPromotionUseCase,
-    private val revertSessionPromotionUseCase: RevertSessionPromotionUseCase
+    private val revertSessionPromotionUseCase: RevertSessionPromotionUseCase,
+    private val selectedSessionManager: SelectedSessionManager
 ) : ViewModel() {
     
     private val _state = MutableStateFlow(AcademicSessionsState())
@@ -97,6 +110,17 @@ class AcademicSessionsViewModel @Inject constructor(
     
     init {
         loadSessions()
+        checkCanCreateNewSession()
+    }
+    
+    private fun checkCanCreateNewSession() {
+        viewModelScope.launch {
+            val (canCreate, blockedMessage) = selectedSessionManager.canCreateNewSession()
+            _state.value = _state.value.copy(
+                canCreateNewSession = canCreate,
+                createSessionBlockedMessage = blockedMessage
+            )
+        }
     }
     
     private fun loadSessions() {
@@ -257,13 +281,72 @@ class AcademicSessionsViewModel @Inject constructor(
         }
     }
     
-    fun setCurrentSession(sessionId: Long) {
+    // NOTE: setCurrentSession removed - sessions can only change via promotion/migration
+    
+    // ========== Session Selection Methods (for viewing historical data) ==========
+    
+    /**
+     * Called when user clicks on a non-current session.
+     * Shows confirmation dialog before switching view.
+     */
+    fun onSessionClick(session: AcademicSession) {
+        if (session.isCurrent) {
+            // Already viewing current session, no action needed
+            return
+        }
+        
         viewModelScope.launch {
-            settingsRepository.setCurrentSession(sessionId).onSuccess {
-                _events.emit(SessionEvent.Success("Current session updated"))
-            }.onFailure { e ->
-                _events.emit(SessionEvent.Error(e.message ?: "Failed to update"))
+            // Determine access level for this session
+            val isPrevious = settingsRepository.isPreviousSession(session.id)
+            val accessLevel = when {
+                isPrevious -> SessionAccessLevel.PREVIOUS_SESSION
+                else -> SessionAccessLevel.READ_ONLY
             }
+            
+            _state.value = _state.value.copy(
+                showSessionSelectionDialog = true,
+                sessionToSelect = session,
+                sessionSelectionAccessLevel = accessLevel
+            )
+        }
+    }
+    
+    /**
+     * Called when user confirms session selection from the dialog.
+     */
+    fun confirmSessionSelection() {
+        viewModelScope.launch {
+            val session = _state.value.sessionToSelect ?: return@launch
+            
+            // Select the session in the manager
+            selectedSessionManager.selectSession(session.id)
+            
+            _state.value = _state.value.copy(
+                showSessionSelectionDialog = false,
+                sessionToSelect = null
+            )
+            
+            _events.emit(SessionEvent.SessionSelected(session))
+        }
+    }
+    
+    /**
+     * Called when user dismisses the session selection dialog.
+     */
+    fun dismissSessionSelectionDialog() {
+        _state.value = _state.value.copy(
+            showSessionSelectionDialog = false,
+            sessionToSelect = null
+        )
+    }
+    
+    /**
+     * Switch back to viewing the current session.
+     */
+    fun selectCurrentSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectCurrentSession()
+            _events.emit(SessionEvent.Success("Switched to current session"))
         }
     }
     

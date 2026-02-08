@@ -6,6 +6,8 @@ import com.navoditpublic.fees.domain.model.Student
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.domain.session.SelectedSessionInfo
+import com.navoditpublic.fees.domain.session.SelectedSessionManager
 import com.navoditpublic.fees.util.ClassUtils
 import com.navoditpublic.fees.util.ReminderTemplate
 import com.navoditpublic.fees.util.ReminderTemplateManager
@@ -94,7 +96,11 @@ data class ClassWiseState(
     val canAddMoreTemplates: Boolean = true,
     
     // Error state
-    val error: String? = null
+    val error: String? = null,
+    
+    // Session viewing state
+    val selectedSessionInfo: SelectedSessionInfo? = null,
+    val isViewingCurrentSession: Boolean = true
 )
 
 @HiltViewModel
@@ -102,7 +108,8 @@ class ClassWiseViewModel @Inject constructor(
     private val studentRepository: StudentRepository,
     private val feeRepository: FeeRepository,
     private val settingsRepository: SettingsRepository,
-    private val reminderTemplateManager: ReminderTemplateManager
+    private val reminderTemplateManager: ReminderTemplateManager,
+    private val selectedSessionManager: SelectedSessionManager
 ) : ViewModel() {
     
     private val _state = MutableStateFlow(ClassWiseState())
@@ -111,6 +118,23 @@ class ClassWiseViewModel @Inject constructor(
     init {
         loadData()
         loadTemplates()
+        observeSelectedSession()
+    }
+    
+    private fun observeSelectedSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectedSessionInfo.collect { sessionInfo ->
+                val isViewingCurrent = sessionInfo?.isCurrentSession ?: true
+                _state.value = _state.value.copy(
+                    selectedSessionInfo = sessionInfo,
+                    isViewingCurrentSession = isViewingCurrent
+                )
+                // Reload data when session changes
+                if (sessionInfo != null) {
+                    loadData()
+                }
+            }
+        }
     }
     
     private fun loadTemplates() {
@@ -238,20 +262,35 @@ class ClassWiseViewModel @Inject constructor(
     private fun loadData() {
         viewModelScope.launch {
             try {
-                val currentSession = settingsRepository.getCurrentSession()
-                val sessionId = currentSession?.id ?: 0L
+                val selectedInfo = selectedSessionManager.selectedSessionInfo.value
+                val isViewingCurrent = selectedInfo?.isCurrentSession ?: true
                 val classes = settingsRepository.getAllActiveClasses().first()
                 val summaries = mutableListOf<ClassSummary>()
                 
+                // For historical sessions, get the list of students who had entries in that session
+                val sessionStudentIds = if (!isViewingCurrent && selectedInfo != null) {
+                    feeRepository.getStudentIdsWithEntriesInSession(selectedInfo.session.id).toSet()
+                } else {
+                    emptySet()
+                }
+                
                 for (className in classes) {
-                    val students = studentRepository.getStudentsByClass(className).first()
-                    val activeStudents = students.filter { it.isActive }
+                    val allClassStudents = studentRepository.getStudentsByClass(className).first()
+                    
+                    // Filter students based on session context
+                    val relevantStudents = if (isViewingCurrent || selectedInfo == null) {
+                        // Current session: active students only
+                        allClassStudents.filter { it.isActive }
+                    } else {
+                        // Historical session: students who had entries in that session
+                        allClassStudents.filter { sessionStudentIds.contains(it.id) }
+                    }
                     
                     var totalCollected = 0.0
                     var totalPending = 0.0
                     val studentsWithDues = mutableListOf<StudentReminderInfo>()
                     
-                    for (student in activeStudents) {
+                    for (student in relevantStudents) {
                         // Use ledger as single source of truth - includes all fees and payments
                         val balance = feeRepository.getCurrentBalance(student.id)
                         
@@ -267,11 +306,11 @@ class ClassWiseViewModel @Inject constructor(
                     val total = totalCollected + totalPending
                     val rate = if (total > 0) totalCollected / total else 0.0
                     
-                    if (activeStudents.isNotEmpty()) {
+                    if (relevantStudents.isNotEmpty()) {
                         summaries.add(
                             ClassSummary(
                                 className = className,
-                                studentCount = activeStudents.size,
+                                studentCount = relevantStudents.size,
                                 collected = totalCollected,
                                 pending = totalPending,
                                 collectionRate = rate,
@@ -302,7 +341,9 @@ class ClassWiseViewModel @Inject constructor(
                     collectionRate = overallRate,
                     reminderTemplates = _state.value.reminderTemplates,
                     selectedTemplate = _state.value.selectedTemplate,
-                    canAddMoreTemplates = _state.value.canAddMoreTemplates
+                    canAddMoreTemplates = _state.value.canAddMoreTemplates,
+                    selectedSessionInfo = selectedInfo,
+                    isViewingCurrentSession = isViewingCurrent
                 )
             } catch (e: Exception) {
                 android.util.Log.e("ClassWiseViewModel", "Failed to load class-wise data", e)
@@ -317,5 +358,14 @@ class ClassWiseViewModel @Inject constructor(
     fun refresh() {
         _state.value = _state.value.copy(isLoading = true)
         loadData()
+    }
+    
+    /**
+     * Switch back to viewing the current session.
+     */
+    fun switchToCurrentSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectCurrentSession()
+        }
     }
 }

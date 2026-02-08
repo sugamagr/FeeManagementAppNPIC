@@ -84,6 +84,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.navoditpublic.fees.presentation.components.LoadingScreen
+import com.navoditpublic.fees.presentation.components.SessionBannerCompact
 import com.navoditpublic.fees.presentation.navigation.LocalDrawerState
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.Saffron
@@ -150,10 +151,23 @@ fun DashboardScreen(
                             scope.launch { drawerState.open() }
                         },
                         sessionName = state.currentSession?.sessionName,
-                        todayCollection = state.todayCollection,
-                        yesterdayCollection = state.yesterdayCollection,
+                        todayCollection = if (state.isViewingCurrentSession) state.todayCollection else -1.0,
+                        yesterdayCollection = if (state.isViewingCurrentSession) state.yesterdayCollection else -1.0,
                         animateStats = animateStats
                     )
+                }
+                
+                // Session Banner (when viewing historical session)
+                if (!state.isViewingCurrentSession && state.selectedSessionInfo != null) {
+                    item {
+                        SessionBannerCompact(
+                            sessionInfo = state.selectedSessionInfo,
+                            onSwitchClick = {
+                                navController.navigate(Screen.AcademicSessions.route)
+                            },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
                 
                 // Date
@@ -204,7 +218,7 @@ fun DashboardScreen(
                     }
                 }
                 
-                // Monthly Collection Card
+                // Monthly/Session Collection Card
                 item {
                     AnimatedVisibility(
                         visible = animateStats,
@@ -212,7 +226,9 @@ fun DashboardScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
                         MonthlyCollectionCard(
-                            monthCollection = state.monthCollection
+                            monthCollection = state.monthCollection,
+                            isSessionTotal = !state.isViewingCurrentSession,
+                            sessionName = if (!state.isViewingCurrentSession) state.currentSession?.sessionName else null
                         )
                     }
                 }
@@ -561,10 +577,13 @@ private fun HeroCollectionCard(
     yesterdayCollection: Double,
     modifier: Modifier = Modifier
 ) {
-    val difference = todayCollection - yesterdayCollection
-    val percentageChange = if (yesterdayCollection > 0) {
+    // If todayCollection is -1, we're viewing a historical session (N/A for today's collection)
+    val isHistoricalSession = todayCollection < 0
+    
+    val difference = if (!isHistoricalSession) todayCollection - yesterdayCollection else 0.0
+    val percentageChange = if (!isHistoricalSession && yesterdayCollection > 0) {
         ((difference / yesterdayCollection) * 100)
-    } else if (todayCollection > 0) {
+    } else if (!isHistoricalSession && todayCollection > 0) {
         100.0
     } else {
         0.0
@@ -603,7 +622,7 @@ private fun HeroCollectionCard(
             // Left side - Collection info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Today's Collection",
+                    text = if (isHistoricalSession) "Historical Session" else "Today's Collection",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -611,46 +630,54 @@ private fun HeroCollectionCard(
                 Spacer(modifier = Modifier.height(4.dp))
                 
                 Text(
-                    text = todayCollection.toRupees(),
+                    text = if (isHistoricalSession) "N/A" else todayCollection.toRupees(),
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = if (isHistoricalSession) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
                 )
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Comparison with yesterday
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (isPositive) SuccessGreenLight else WarningRedLight
+                // Comparison with yesterday (only for current session)
+                if (!isHistoricalSession) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isPositive) SuccessGreenLight else WarningRedLight
                         ) {
-                            Icon(
-                                if (isPositive) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = if (isPositive) SuccessGreen else WarningRed
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${if (isPositive) "+" else ""}${String.format("%.1f", percentageChange)}%",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isPositive) SuccessGreen else WarningRed
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    if (isPositive) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = if (isPositive) SuccessGreen else WarningRed
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "${if (isPositive) "+" else ""}${String.format("%.1f", percentageChange)}%",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isPositive) SuccessGreen else WarningRed
+                                )
+                            }
                         }
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        Text(
+                            text = "vs yesterday",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
+                } else {
                     Text(
-                        text = "vs yesterday",
+                        text = "Daily collection not available for past sessions",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -670,31 +697,33 @@ private fun HeroCollectionCard(
                     )
                 }
                 
-                // Progress arc
-                Canvas(modifier = Modifier.size(90.dp)) {
-                    val sweepAngle = 360f * animatedProgress.value * 
-                        (if (yesterdayCollection > 0) (todayCollection / (yesterdayCollection * 1.5f)).coerceIn(0.0, 1.0).toFloat() else 0.5f)
-                    drawArc(
-                        brush = Brush.sweepGradient(
-                            colors = listOf(Saffron, SaffronDark, Saffron)
-                        ),
-                        startAngle = -90f,
-                        sweepAngle = sweepAngle,
-                        useCenter = false,
-                        style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
-                    )
+                // Progress arc (only show animation for current session)
+                if (!isHistoricalSession) {
+                    Canvas(modifier = Modifier.size(90.dp)) {
+                        val sweepAngle = 360f * animatedProgress.value * 
+                            (if (yesterdayCollection > 0) (todayCollection / (yesterdayCollection * 1.5f)).coerceIn(0.0, 1.0).toFloat() else 0.5f)
+                        drawArc(
+                            brush = Brush.sweepGradient(
+                                colors = listOf(Saffron, SaffronDark, Saffron)
+                            ),
+                            startAngle = -90f,
+                            sweepAngle = sweepAngle,
+                            useCenter = false,
+                            style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                    }
                 }
                 
                 // Center content
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        Icons.Default.Payment,
+                        if (isHistoricalSession) Icons.Default.CalendarMonth else Icons.Default.Payment,
                         contentDescription = null,
                         tint = SaffronDark,
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        text = "Today",
+                        text = if (isHistoricalSession) "Past" else "Today",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -788,8 +817,16 @@ private fun ModernStatsCard(
 
 @Composable
 private fun MonthlyCollectionCard(
-    monthCollection: Double
+    monthCollection: Double,
+    isSessionTotal: Boolean = false,
+    sessionName: String? = null
 ) {
+    val title = if (isSessionTotal && sessionName != null) {
+        "$sessionName Total Collection"
+    } else {
+        "This Month's Collection"
+    }
+    
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -827,7 +864,7 @@ private fun MonthlyCollectionCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "This Month's Collection",
+                        text = title,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

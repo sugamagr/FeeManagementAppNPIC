@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.data.local.entity.PaymentMode
 import com.navoditpublic.fees.domain.model.ReceiptWithStudent
 import com.navoditpublic.fees.domain.repository.FeeRepository
+import com.navoditpublic.fees.domain.session.SelectedSessionInfo
+import com.navoditpublic.fees.domain.session.SelectedSessionManager
 import com.navoditpublic.fees.util.ClassUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,7 +74,11 @@ data class ReceiptRegisterState(
     val cashCount: Int = 0,
     val onlineTotal: Double = 0.0,
     val onlineCount: Int = 0,
-    val cancelledTotal: Double = 0.0
+    val cancelledTotal: Double = 0.0,
+    
+    // Session viewing state
+    val selectedSessionInfo: SelectedSessionInfo? = null,
+    val isViewingCurrentSession: Boolean = true
 )
 
 private fun getStartOfMonth(): Long {
@@ -133,7 +139,8 @@ private fun getEndOfDay(timestamp: Long): Long {
 
 @HiltViewModel
 class ReceiptRegisterViewModel @Inject constructor(
-    private val feeRepository: FeeRepository
+    private val feeRepository: FeeRepository,
+    private val selectedSessionManager: SelectedSessionManager
 ) : ViewModel() {
     
     private val _state = MutableStateFlow(ReceiptRegisterState())
@@ -141,17 +148,42 @@ class ReceiptRegisterViewModel @Inject constructor(
     
     init {
         loadData()
+        observeSelectedSession()
+    }
+    
+    private fun observeSelectedSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectedSessionInfo.collect { sessionInfo ->
+                val isViewingCurrent = sessionInfo?.isCurrentSession ?: true
+                _state.value = _state.value.copy(
+                    selectedSessionInfo = sessionInfo,
+                    isViewingCurrentSession = isViewingCurrent
+                )
+                // Reload data when session changes
+                if (sessionInfo != null) {
+                    loadData()
+                }
+            }
+        }
     }
     
     private fun loadData() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true)
             
+            val selectedInfo = selectedSessionManager.selectedSessionInfo.value
+            
             feeRepository.getReceiptsWithStudentsByDateRange(
                 _state.value.startDate,
                 _state.value.endDate
             ).collect { receiptsWithStudents ->
-                val sortedReceipts = receiptsWithStudents.sortedByDescending { it.receipt.receiptNumber }
+                // Filter by session if viewing historical session
+                val sessionFiltered = if (selectedInfo != null && !selectedInfo.isCurrentSession) {
+                    receiptsWithStudents.filter { it.receipt.sessionId == selectedInfo.session.id }
+                } else {
+                    receiptsWithStudents
+                }
+                val sortedReceipts = sessionFiltered.sortedByDescending { it.receipt.receiptNumber }
                 
                 // Calculate analytics
                 val activeReceipts = sortedReceipts.filter { !it.receipt.isCancelled }
@@ -318,5 +350,14 @@ class ReceiptRegisterViewModel @Inject constructor(
             "Online Count" to _state.value.onlineCount.toString()
         )
         return Triple(headers, rows, summary)
+    }
+    
+    /**
+     * Switch back to viewing the current session.
+     */
+    fun switchToCurrentSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectCurrentSession()
+        }
     }
 }

@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.navoditpublic.fees.presentation.components.LoadingScreen
+import com.navoditpublic.fees.presentation.components.SessionBannerCompact
 import com.navoditpublic.fees.presentation.navigation.LocalDrawerState
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.PaidChipBackground
@@ -335,6 +336,17 @@ fun LedgerMainScreen(
                     }
                     
                     item { Spacer(modifier = Modifier.height(12.dp)) }
+                    
+                    // Session Banner (when viewing historical session)
+                    if (!state.isViewingCurrentSession && state.selectedSessionInfo != null) {
+                        item {
+                            SessionBannerCompact(
+                                sessionInfo = state.selectedSessionInfo,
+                                onSwitchClick = { navController.navigate(Screen.AcademicSessions.route) },
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
                     
                     // Class Cards
                     itemsIndexed(

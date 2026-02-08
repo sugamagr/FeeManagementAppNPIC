@@ -109,6 +109,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.navoditpublic.fees.presentation.components.EmptyState
 import com.navoditpublic.fees.presentation.components.LoadingScreen
+import com.navoditpublic.fees.presentation.components.SessionBannerCompact
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronDark
@@ -195,6 +196,17 @@ fun ClassWiseScreen(
                         collectionRate = state.collectionRate,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
+                }
+                
+                // Session Banner (when viewing historical session)
+                if (!state.isViewingCurrentSession && state.selectedSessionInfo != null) {
+                    item {
+                        SessionBannerCompact(
+                            sessionInfo = state.selectedSessionInfo,
+                            onSwitchClick = { navController.navigate(Screen.AcademicSessions.route) },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
                 
                 // Search Bar

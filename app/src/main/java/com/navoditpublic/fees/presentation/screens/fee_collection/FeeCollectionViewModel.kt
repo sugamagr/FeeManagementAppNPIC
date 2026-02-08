@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.data.local.entity.PaymentMode
 import com.navoditpublic.fees.domain.model.ReceiptWithStudent
 import com.navoditpublic.fees.domain.repository.FeeRepository
+import com.navoditpublic.fees.domain.session.SelectedSessionInfo
+import com.navoditpublic.fees.domain.session.SelectedSessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,12 +70,17 @@ data class FeeCollectionState(
     val selectedClass: String? = null, // null means "All Classes"
     
     // Error
-    val error: String? = null
+    val error: String? = null,
+    
+    // Session viewing state
+    val selectedSessionInfo: SelectedSessionInfo? = null,
+    val isViewingCurrentSession: Boolean = true
 )
 
 @HiltViewModel
 class FeeCollectionViewModel @Inject constructor(
-    private val feeRepository: FeeRepository
+    private val feeRepository: FeeRepository,
+    private val selectedSessionManager: SelectedSessionManager
 ) : ViewModel() {
     
     private val _state = MutableStateFlow(FeeCollectionState())
@@ -81,11 +88,31 @@ class FeeCollectionViewModel @Inject constructor(
     
     init {
         loadData()
+        observeSelectedSession()
+    }
+    
+    private fun observeSelectedSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectedSessionInfo.collect { sessionInfo ->
+                val isViewingCurrent = sessionInfo?.isCurrentSession ?: true
+                _state.value = _state.value.copy(
+                    selectedSessionInfo = sessionInfo,
+                    isViewingCurrentSession = isViewingCurrent
+                )
+                // Reload data when session changes
+                if (sessionInfo != null) {
+                    loadData()
+                }
+            }
+        }
     }
     
     private fun loadData() {
         viewModelScope.launch {
             try {
+                val selectedInfo = selectedSessionManager.selectedSessionInfo.value
+                val isViewingCurrent = selectedInfo?.isCurrentSession ?: true
+                
                 val now = System.currentTimeMillis()
                 val todayStart = getStartOfDay(now)
                 val todayEnd = getEndOfDay(now)
@@ -99,24 +126,50 @@ class FeeCollectionViewModel @Inject constructor(
                     feeRepository.getMonthlyCollectionTotal(monthStart, todayEnd),
                     feeRepository.getDailyCollectionTotal(now - 24 * 60 * 60 * 1000),
                     feeRepository.getRecentReceiptsWithStudents(200) // Get more for filtering
-                ) { todayTotal, weekTotal, monthTotal, yesterdayTotal, receipts ->
+                ) { todayTotal, weekTotal, monthTotal, yesterdayTotal, allReceipts ->
+                    
+                    // Filter receipts by session if viewing historical session
+                    val receipts = if (isViewingCurrent || selectedInfo == null) {
+                        allReceipts
+                    } else {
+                        allReceipts.filter { it.receipt.sessionId == selectedInfo.session.id }
+                    }
+                    
+                    // For historical sessions, the daily stats are N/A (show -1)
+                    val displayTodayCollection = if (isViewingCurrent) todayTotal ?: 0.0 else -1.0
+                    val displayWeekCollection = if (isViewingCurrent) weekTotal ?: 0.0 else -1.0
+                    val displayYesterdayCollection = if (isViewingCurrent) yesterdayTotal ?: 0.0 else -1.0
+                    val displayMonthCollection = if (isViewingCurrent) {
+                        monthTotal ?: 0.0
+                    } else {
+                        // For historical sessions, show total session collection
+                        receipts.filter { !it.receipt.isCancelled }.sumOf { it.receipt.netAmount }
+                    }
                     
                     // Calculate counts - exclude cancelled receipts for accurate statistics
-                    val todayReceipts = receipts.filter { 
-                        it.receipt.receiptDate >= todayStart && 
-                        it.receipt.receiptDate <= todayEnd &&
-                        !it.receipt.isCancelled
-                    }
-                    val weekReceipts = receipts.filter { 
-                        it.receipt.receiptDate >= weekStart && 
-                        it.receipt.receiptDate <= todayEnd &&
-                        !it.receipt.isCancelled
-                    }
-                    val monthReceipts = receipts.filter { 
-                        it.receipt.receiptDate >= monthStart && 
-                        it.receipt.receiptDate <= todayEnd &&
-                        !it.receipt.isCancelled
-                    }
+                    val todayReceipts = if (isViewingCurrent) {
+                        receipts.filter { 
+                            it.receipt.receiptDate >= todayStart && 
+                            it.receipt.receiptDate <= todayEnd &&
+                            !it.receipt.isCancelled
+                        }
+                    } else emptyList()
+                    
+                    val weekReceipts = if (isViewingCurrent) {
+                        receipts.filter { 
+                            it.receipt.receiptDate >= weekStart && 
+                            it.receipt.receiptDate <= todayEnd &&
+                            !it.receipt.isCancelled
+                        }
+                    } else emptyList()
+                    
+                    val monthReceipts = if (isViewingCurrent) {
+                        receipts.filter { 
+                            it.receipt.receiptDate >= monthStart && 
+                            it.receipt.receiptDate <= todayEnd &&
+                            !it.receipt.isCancelled
+                        }
+                    } else receipts.filter { !it.receipt.isCancelled }
                     
                     val cashReceipts = receipts.filter { 
                         it.receipt.paymentMode == PaymentMode.CASH && !it.receipt.isCancelled
@@ -135,10 +188,10 @@ class FeeCollectionViewModel @Inject constructor(
                     
                     FeeCollectionState(
                         isLoading = false,
-                        todayCollection = todayTotal ?: 0.0,
-                        weekCollection = weekTotal ?: 0.0,
-                        monthCollection = monthTotal ?: 0.0,
-                        yesterdayCollection = yesterdayTotal ?: 0.0,
+                        todayCollection = displayTodayCollection,
+                        weekCollection = displayWeekCollection,
+                        monthCollection = displayMonthCollection,
+                        yesterdayCollection = displayYesterdayCollection,
                         todayReceiptCount = todayReceipts.size,
                         weekReceiptCount = weekReceipts.size,
                         monthReceiptCount = monthReceipts.size,
@@ -154,7 +207,9 @@ class FeeCollectionViewModel @Inject constructor(
                             _state.value.paymentFilter,
                             _state.value.statusFilter,
                             _state.value.selectedClass
-                        )
+                        ),
+                        selectedSessionInfo = selectedInfo,
+                        isViewingCurrentSession = isViewingCurrent
                     )
                 }.collect { newState ->
                     _state.value = newState.copy(
@@ -377,5 +432,14 @@ class FeeCollectionViewModel @Inject constructor(
             set(Calendar.MILLISECOND, 0)
         }
         return cal.timeInMillis
+    }
+    
+    /**
+     * Switch back to viewing the current session.
+     */
+    fun switchToCurrentSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectCurrentSession()
+        }
     }
 }

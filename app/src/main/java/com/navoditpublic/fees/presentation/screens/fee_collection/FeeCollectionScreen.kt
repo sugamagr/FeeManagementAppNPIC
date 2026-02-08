@@ -97,6 +97,7 @@ import com.navoditpublic.fees.data.local.entity.PaymentMode
 import com.navoditpublic.fees.domain.model.ReceiptWithStudent
 import com.navoditpublic.fees.presentation.components.EmptyState
 import com.navoditpublic.fees.presentation.components.LoadingScreen
+import com.navoditpublic.fees.presentation.components.SessionBannerCompact
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronDark
@@ -147,6 +148,15 @@ fun FeeCollectionScreen(
                 ScreenHeader(
                     onBackClick = { navController.popBackStack() }
                 )
+                
+                // Session Banner (when viewing historical session)
+                if (!state.isViewingCurrentSession && state.selectedSessionInfo != null) {
+                    SessionBannerCompact(
+                        sessionInfo = state.selectedSessionInfo,
+                        onSwitchClick = { navController.navigate(Screen.AcademicSessions.route) },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
                 
                 // Scrollable content
                 LazyColumn(

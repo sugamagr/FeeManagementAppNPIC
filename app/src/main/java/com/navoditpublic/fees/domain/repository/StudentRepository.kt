@@ -135,6 +135,20 @@ interface StudentRepository {
      */
     suspend fun getActiveStudentCountSync(): Int
     
+    // ========== Session-Based Viewing Methods ==========
+    
+    /**
+     * Get students by their IDs.
+     * Used for viewing historical session data - loads all students who had entries in that session.
+     */
+    suspend fun getStudentsByIds(studentIds: List<Long>): List<Student>
+    
+    /**
+     * Get students with balance for a specific session.
+     * Returns students who have ledger entries in the given session.
+     */
+    suspend fun getStudentsWithBalanceForSession(sessionId: Long, feeRepository: FeeRepository): List<StudentWithBalance>
+    
     // ========== Individual Student Status Management ==========
     
     /**

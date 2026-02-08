@@ -948,6 +948,20 @@ class FeeRepositoryImpl @Inject constructor(
         return ledgerDao.getTotalPendingDuesSync()
     }
     
+    // ========== Session-Based Viewing Methods ==========
+    
+    override suspend fun getStudentIdsWithEntriesInSession(sessionId: Long): List<Long> {
+        return ledgerDao.getStudentIdsWithEntriesInSession(sessionId)
+    }
+    
+    override suspend fun getTotalPendingDuesForSession(sessionId: Long): Double {
+        return ledgerDao.getTotalPendingDuesForSession(sessionId)
+    }
+    
+    override suspend fun getStudentsWithDuesCountForSession(sessionId: Long): Int {
+        return ledgerDao.getStudentsWithDuesCountForSession(sessionId)
+    }
+    
     override suspend fun getReceiptCountForSession(sessionId: Long): Int {
         return receiptDao.getReceiptCountForSession(sessionId)
     }

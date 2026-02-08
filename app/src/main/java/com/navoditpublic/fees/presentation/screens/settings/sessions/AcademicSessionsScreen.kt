@@ -80,7 +80,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.navoditpublic.fees.domain.model.AcademicSession
+import com.navoditpublic.fees.domain.usecase.SessionAccessLevel
 import com.navoditpublic.fees.presentation.components.LoadingScreen
+import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.Saffron
 import com.navoditpublic.fees.presentation.theme.SaffronDark
 import kotlinx.coroutines.delay
@@ -143,6 +145,14 @@ fun AcademicSessionsScreen(
                         Toast.LENGTH_LONG
                     ).show()
                 }
+                is SessionEvent.SessionSelected -> {
+                    // Session was selected, navigate to dashboard
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Dashboard.route) { 
+                            inclusive = true 
+                        }
+                    }
+                }
             }
         }
     }
@@ -196,6 +206,24 @@ fun AcademicSessionsScreen(
                 isReverting = state.isReverting,
                 onExecute = { forceDelete, reason -> viewModel.executeRevert(forceDelete, reason) },
                 onDismiss = { viewModel.dismissRevertDialog() }
+            )
+        }
+    }
+    
+    // Session Selection Confirmation Dialog
+    if (state.showSessionSelectionDialog) {
+        state.sessionToSelect?.let { session ->
+            SessionSelectionDialog(
+                session = session,
+                accessLevel = state.sessionSelectionAccessLevel,
+                onConfirm = {
+                    viewModel.confirmSessionSelection()
+                    // Navigate to dashboard after selection
+                    navController.navigate("dashboard") {
+                        popUpTo("dashboard") { inclusive = true }
+                    }
+                },
+                onDismiss = { viewModel.dismissSessionSelectionDialog() }
             )
         }
     }
@@ -331,7 +359,7 @@ fun AcademicSessionsScreen(
                                 session = session,
                                 isPromoted = state.sessionPromotions.containsKey(session.id),
                                 isPreviousSession = isPreviousSession(session, state.sessions, state.sessionPromotions),
-                                onSetCurrent = { viewModel.setCurrentSession(session.id) },
+                                onSelect = { viewModel.onSessionClick(session) },
                                 onPromote = { viewModel.startPromotionToNewSession(session) },
                                 onRevert = { viewModel.openRevertDialog(session) }
                             )
@@ -581,14 +609,23 @@ private fun SessionCard(
     session: AcademicSession,
     isPromoted: Boolean,
     isPreviousSession: Boolean,
-    onSetCurrent: () -> Unit,
+    onSelect: () -> Unit,
     onPromote: () -> Unit,
     onRevert: () -> Unit
 ) {
     val isCurrent = session.isCurrent
     
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                // Make non-current sessions clickable to view their data
+                if (!isCurrent) {
+                    Modifier.clickable { onSelect() }
+                } else {
+                    Modifier
+                }
+            ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -679,18 +716,31 @@ private fun SessionCard(
                     )
                 }
                 
-                // Action buttons
+                // View data button for non-current sessions
                 if (!isCurrent) {
-                    IconButton(
-                        onClick = onSetCurrent,
-                        modifier = Modifier.size(36.dp)
+                    Surface(
+                        modifier = Modifier.clickable { onSelect() },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isPreviousSession) AccentPurpleLight else InactiveGrayLight
                     ) {
-                        Icon(
-                            Icons.Outlined.CheckCircle,
-                            contentDescription = "Set Current",
-                            tint = SuccessGreen,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Outlined.History,
+                                contentDescription = "View Data",
+                                tint = if (isPreviousSession) AccentPurple else InactiveGray,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "View",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isPreviousSession) AccentPurple else InactiveGray
+                            )
+                        }
                     }
                 }
             }
@@ -969,6 +1019,142 @@ private fun NoResultsState(query: String) {
 }
 
 // ==================== DIALOGS ====================
+
+@Composable
+private fun SessionSelectionDialog(
+    session: AcademicSession,
+    accessLevel: SessionAccessLevel,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isPreviousSession = accessLevel == SessionAccessLevel.PREVIOUS_SESSION
+    val iconColor = if (isPreviousSession) AccentPurple else InactiveGray
+    val bgColor = if (isPreviousSession) AccentPurpleLight else InactiveGrayLight
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(24.dp),
+        containerColor = Color.White,
+        icon = {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(bgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Outlined.History,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        },
+        title = {
+            Text(
+                text = if (isPreviousSession) "View Previous Session Data" else "View Historical Session Data",
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = "You are about to view data for session ${session.sessionName}.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // What will be shown
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "This will show:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "• All students who were part of this session\n" +
+                                   "• Fee receipts from this session only\n" +
+                                   "• Pending dues as of ${session.endDateFormatted}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Editing info
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isPreviousSession) SuccessGreenLight else Color(0xFFFFF3E0),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            if (isPreviousSession) Icons.Outlined.CheckCircle else Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = if (isPreviousSession) SuccessGreen else Color(0xFFFF9800),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = if (isPreviousSession) "EDITING ALLOWED" else "READ-ONLY SESSION",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isPreviousSession) SuccessGreen else Color(0xFFE65100)
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (isPreviousSession) {
+                                    "Add/edit/cancel receipts\n(auto-adjusts current session balances)\nEdit student profiles & transport"
+                                } else {
+                                    "No financial changes can be made.\nStudent profiles can still be edited."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isPreviousSession) SuccessGreen.copy(alpha = 0.8f) else Color(0xFFE65100).copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isPreviousSession) AccentPurple else InactiveGray
+                )
+            ) {
+                Icon(Icons.Outlined.History, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("View Session", fontWeight = FontWeight.SemiBold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    )
+}
+
 @Composable
 private fun AddFirstSessionDialog(
     sessionName: String,

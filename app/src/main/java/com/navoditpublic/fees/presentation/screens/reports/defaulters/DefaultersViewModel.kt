@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.domain.session.SelectedSessionInfo
+import com.navoditpublic.fees.domain.session.SelectedSessionManager
 import com.navoditpublic.fees.util.ClassUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,14 +86,18 @@ data class DefaultersState(
     val averageDue: Double = 0.0,
     val highestDue: Double = 0.0,
     // Error state
-    val error: String? = null
+    val error: String? = null,
+    // Session viewing state
+    val selectedSessionInfo: SelectedSessionInfo? = null,
+    val isViewingCurrentSession: Boolean = true
 )
 
 @HiltViewModel
 class DefaultersViewModel @Inject constructor(
     private val studentRepository: StudentRepository,
     private val feeRepository: FeeRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val selectedSessionManager: SelectedSessionManager
 ) : ViewModel() {
     
     private val _state = MutableStateFlow(DefaultersState())
@@ -100,6 +106,23 @@ class DefaultersViewModel @Inject constructor(
     init {
         loadDefaulters()
         loadClasses()
+        observeSelectedSession()
+    }
+    
+    private fun observeSelectedSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectedSessionInfo.collect { sessionInfo ->
+                val isViewingCurrent = sessionInfo?.isCurrentSession ?: true
+                _state.value = _state.value.copy(
+                    selectedSessionInfo = sessionInfo,
+                    isViewingCurrentSession = isViewingCurrent
+                )
+                // Reload data when session changes
+                if (sessionInfo != null) {
+                    loadDefaulters()
+                }
+            }
+        }
     }
     
     private fun loadClasses() {
@@ -117,10 +140,24 @@ class DefaultersViewModel @Inject constructor(
             try {
                 _state.value = _state.value.copy(isLoading = true)
                 
-                val currentSession = settingsRepository.getCurrentSession()
-                val sessionId = currentSession?.id ?: return@launch
+                val selectedInfo = selectedSessionManager.selectedSessionInfo.value
+                val isViewingCurrent = selectedInfo?.isCurrentSession ?: true
                 
-                val allStudents = studentRepository.getAllActiveStudents().first()
+                // For historical sessions, get the list of students who had entries in that session
+                val sessionStudentIds = if (!isViewingCurrent && selectedInfo != null) {
+                    feeRepository.getStudentIdsWithEntriesInSession(selectedInfo.session.id).toSet()
+                } else {
+                    emptySet()
+                }
+                
+                val allStudents = if (isViewingCurrent || selectedInfo == null) {
+                    // Current session: active students only
+                    studentRepository.getAllActiveStudents().first()
+                } else {
+                    // Historical session: students who had entries in that session
+                    studentRepository.getStudentsByIds(sessionStudentIds.toList())
+                }
+                
                 val defaultersList = mutableListOf<DefaulterInfo>()
                 
                 for (student in allStudents) {
@@ -161,7 +198,9 @@ class DefaultersViewModel @Inject constructor(
                     totalDues = totalDues,
                     averageDue = averageDue,
                     highestDue = highestDue,
-                    error = null  // Clear any previous error on successful load
+                    error = null,  // Clear any previous error on successful load
+                    selectedSessionInfo = selectedInfo,
+                    isViewingCurrentSession = isViewingCurrent
                 )
                 
                 applyFilters()
@@ -248,5 +287,14 @@ class DefaultersViewModel @Inject constructor(
     
     fun refresh() {
         loadDefaulters()
+    }
+    
+    /**
+     * Switch back to viewing the current session.
+     */
+    fun switchToCurrentSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectCurrentSession()
+        }
     }
 }

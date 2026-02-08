@@ -7,6 +7,8 @@ import com.navoditpublic.fees.domain.model.Student
 import com.navoditpublic.fees.domain.repository.FeeRepository
 import com.navoditpublic.fees.domain.repository.SettingsRepository
 import com.navoditpublic.fees.domain.repository.StudentRepository
+import com.navoditpublic.fees.domain.session.SelectedSessionInfo
+import com.navoditpublic.fees.domain.session.SelectedSessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,7 +47,10 @@ data class LedgerClassState(
     val error: String? = null,
     // For alphabet rail
     val groupedStudents: Map<Char, List<StudentLedgerInfo>> = emptyMap(),
-    val availableLetters: List<Char> = emptyList()
+    val availableLetters: List<Char> = emptyList(),
+    // Session viewing state
+    val selectedSessionInfo: SelectedSessionInfo? = null,
+    val isViewingCurrentSession: Boolean = true
 ) {
     // Get index for alphabet rail navigation
     fun getIndexForLetter(letter: Char): Int {
@@ -70,7 +75,8 @@ class LedgerClassViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val studentRepository: StudentRepository,
     private val feeRepository: FeeRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val selectedSessionManager: SelectedSessionManager
 ) : ViewModel() {
     
     private val className: String = savedStateHandle.get<String>("className") ?: ""
@@ -82,6 +88,23 @@ class LedgerClassViewModel @Inject constructor(
     
     init {
         loadData()
+        observeSelectedSession()
+    }
+    
+    private fun observeSelectedSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectedSessionInfo.collect { sessionInfo ->
+                val isViewingCurrent = sessionInfo?.isCurrentSession ?: true
+                _state.value = _state.value.copy(
+                    selectedSessionInfo = sessionInfo,
+                    isViewingCurrentSession = isViewingCurrent
+                )
+                // Reload data when session changes
+                if (sessionInfo != null) {
+                    loadData()
+                }
+            }
+        }
     }
     
     fun loadData() {
@@ -89,11 +112,21 @@ class LedgerClassViewModel @Inject constructor(
             _state.value = _state.value.copy(isLoading = true)
             
             try {
-                val currentSession = settingsRepository.getCurrentSession()
-                val sessionId = currentSession?.id ?: 0L
+                val selectedInfo = selectedSessionManager.selectedSessionInfo.value
+                val isViewingCurrent = selectedInfo?.isCurrentSession ?: true
+                val displaySession = selectedInfo?.session ?: settingsRepository.getCurrentSession()
                 
-                val students = studentRepository.getStudentsByClass(className).first()
-                    .filter { it.isActive }
+                // Get students based on session context
+                val students = if (isViewingCurrent || selectedInfo == null) {
+                    // Current session: active students of this class
+                    studentRepository.getStudentsByClass(className).first()
+                        .filter { it.isActive }
+                } else {
+                    // Historical session: students who had entries in that session
+                    val sessionStudentIds = feeRepository.getStudentIdsWithEntriesInSession(selectedInfo.session.id).toSet()
+                    studentRepository.getStudentsByClass(className).first()
+                        .filter { sessionStudentIds.contains(it.id) }
+                }
                 
                 val studentInfoList = students.map { student ->
                     // Use ledger as single source of truth
@@ -118,14 +151,16 @@ class LedgerClassViewModel @Inject constructor(
                 
                 _state.value = _state.value.copy(
                     isLoading = false,
-                    sessionName = currentSession?.sessionName ?: "Current Session",
+                    sessionName = displaySession?.sessionName ?: "Current Session",
                     students = filteredAndSorted,
                     totalStudents = studentInfoList.size,
                     totalDues = studentInfoList.sumOf { it.netBalance.coerceAtLeast(0.0) },
                     totalPaid = studentInfoList.sumOf { it.paidAmount },
                     groupedStudents = grouped,
                     availableLetters = letters,
-                    error = null
+                    error = null,
+                    selectedSessionInfo = selectedInfo,
+                    isViewingCurrentSession = isViewingCurrent
                 )
             } catch (e: Exception) {
                 android.util.Log.e("LedgerClassViewModel", "Failed to load ledger data for class $className", e)
@@ -229,5 +264,14 @@ class LedgerClassViewModel @Inject constructor(
         return students.groupBy { info ->
             info.student.name.firstOrNull()?.uppercaseChar() ?: '#'
         }.toSortedMap()
+    }
+    
+    /**
+     * Switch back to viewing the current session.
+     */
+    fun switchToCurrentSession() {
+        viewModelScope.launch {
+            selectedSessionManager.selectCurrentSession()
+        }
     }
 }

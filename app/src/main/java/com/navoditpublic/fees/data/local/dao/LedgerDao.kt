@@ -299,6 +299,61 @@ interface LedgerDao {
     suspend fun getEntryCountForSession(sessionId: Long): Int
     
     /**
+     * Get all student IDs who have ledger entries in a specific session.
+     * Used for viewing historical session data.
+     */
+    @Query("""
+        SELECT DISTINCT student_id FROM ledger_entries 
+        WHERE session_id = :sessionId 
+        AND is_reversed = 0
+    """)
+    suspend fun getStudentIdsWithEntriesInSession(sessionId: Long): List<Long>
+    
+    /**
+     * Get total pending dues for a specific session.
+     * Only considers entries for that session, not cumulative balance.
+     */
+    @Query("""
+        SELECT COALESCE(
+            SUM(CASE WHEN entry_type = 'DEBIT' THEN debit_amount ELSE 0 END) -
+            SUM(CASE WHEN entry_type = 'CREDIT' THEN credit_amount ELSE 0 END),
+            0.0
+        ) FROM ledger_entries le
+        INNER JOIN students s ON le.student_id = s.id AND s.is_active = 1
+        WHERE le.session_id = :sessionId
+        AND le.is_reversed = 0
+    """)
+    suspend fun getTotalPendingDuesForSession(sessionId: Long): Double
+    
+    /**
+     * Get total collection (credits) for a specific session.
+     */
+    @Query("""
+        SELECT COALESCE(SUM(credit_amount), 0.0) FROM ledger_entries 
+        WHERE session_id = :sessionId 
+        AND entry_type = 'CREDIT'
+        AND is_reversed = 0
+    """)
+    suspend fun getTotalCollectionForSession(sessionId: Long): Double
+    
+    /**
+     * Get students with dues count for a specific session.
+     */
+    @Query("""
+        SELECT COUNT(*) FROM (
+            SELECT le.student_id
+            FROM ledger_entries le
+            INNER JOIN students s ON le.student_id = s.id AND s.is_active = 1
+            WHERE le.session_id = :sessionId
+            AND le.is_reversed = 0
+            GROUP BY le.student_id
+            HAVING SUM(CASE WHEN le.entry_type = 'DEBIT' THEN le.debit_amount ELSE 0 END) -
+                   SUM(CASE WHEN le.entry_type = 'CREDIT' THEN le.credit_amount ELSE 0 END) > 0
+        )
+    """)
+    suspend fun getStudentsWithDuesCountForSession(sessionId: Long): Int
+    
+    /**
      * Check if session has any RECEIPT entries (payments collected)
      */
     @Query("""
@@ -355,6 +410,72 @@ interface LedgerDao {
      */
     @Query("SELECT EXISTS(SELECT 1 FROM ledger_entries WHERE student_id = :studentId)")
     suspend fun hasEntriesForStudent(studentId: Long): Boolean
+    
+    // ========== Session-Based Viewing Methods ==========
+    
+    /**
+     * Get all distinct student IDs that have ledger entries in a specific session.
+     * Used to determine which students were "part of" a session for historical viewing.
+     */
+    @Query("""
+        SELECT DISTINCT student_id 
+        FROM ledger_entries 
+        WHERE session_id = :sessionId 
+        AND is_reversed = 0
+    """)
+    suspend fun getStudentIdsForSession(sessionId: Long): List<Long>
+    
+    /**
+     * Get ledger entries for a student up to a certain date.
+     * Used when viewing historical sessions to hide future entries.
+     */
+    @Query("""
+        SELECT * FROM ledger_entries 
+        WHERE student_id = :studentId 
+        AND entry_date <= :maxDate
+        AND is_reversed = 0 
+        ORDER BY entry_date ASC, id ASC
+    """)
+    suspend fun getLedgerForStudentUpToDate(studentId: Long, maxDate: Long): List<LedgerEntryEntity>
+    
+    /**
+     * Check if a student has entries in sessions after the given session.
+     * Used to show "View Current Session" button in historical ledger views.
+     */
+    @Query("""
+        SELECT EXISTS(
+            SELECT 1 FROM ledger_entries le
+            INNER JOIN academic_sessions s ON le.session_id = s.id
+            WHERE le.student_id = :studentId 
+            AND le.is_reversed = 0
+            AND s.start_date > (SELECT end_date FROM academic_sessions WHERE id = :sessionId)
+        )
+    """)
+    suspend fun hasEntriesInLaterSessions(studentId: Long, sessionId: Long): Boolean
+    
+    /**
+     * Get pending dues for ACTIVE students as of a specific date (session end date).
+     * Used for historical session viewing.
+     */
+    @Query("""
+        SELECT COALESCE(SUM(balance), 0.0) FROM (
+            SELECT le.student_id,
+                   SUM(CASE WHEN le.entry_type = 'DEBIT' THEN le.debit_amount ELSE 0 END) -
+                   SUM(CASE WHEN le.entry_type = 'CREDIT' THEN le.credit_amount ELSE 0 END) as balance
+            FROM ledger_entries le
+            INNER JOIN students s ON le.student_id = s.id
+            WHERE le.is_reversed = 0
+            AND le.entry_date <= :asOfDate
+            AND le.student_id IN (
+                SELECT DISTINCT student_id FROM ledger_entries 
+                WHERE session_id = :sessionId AND is_reversed = 0
+            )
+            GROUP BY le.student_id
+            HAVING balance > 0
+        )
+    """)
+    suspend fun getPendingDuesAsOfDate(sessionId: Long, asOfDate: Long): Double
+    
 }
 
 /**

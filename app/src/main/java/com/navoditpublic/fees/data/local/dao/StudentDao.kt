@@ -310,6 +310,23 @@ interface StudentDao {
      */
     @Query("SELECT COUNT(*) FROM students WHERE is_active = 0")
     suspend fun getInactiveStudentCount(): Int
+    
+    // ========== Session-Based Viewing Methods ==========
+    
+    /**
+     * Get students by a list of IDs.
+     * Used for historical session viewing where we need to show all students
+     * who had ledger entries in that session (both active and inactive).
+     */
+    @Query("SELECT * FROM students WHERE id IN (:studentIds) ORDER BY name ASC")
+    suspend fun getStudentsByIds(studentIds: List<Long>): List<StudentEntity>
+    
+    /**
+     * Get students by a list of IDs with their current active status.
+     * Returns all students regardless of active status.
+     */
+    @Query("SELECT * FROM students WHERE id IN (:studentIds) ORDER BY is_active DESC, name ASC")
+    suspend fun getStudentsByIdsWithStatus(studentIds: List<Long>): List<StudentEntity>
 }
 
 /**

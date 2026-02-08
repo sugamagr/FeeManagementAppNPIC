@@ -195,6 +195,31 @@ class StudentRepositoryImpl @Inject constructor(
         return studentDao.getActiveStudentCountSync()
     }
     
+    // ========== Session-Based Viewing Methods ==========
+    
+    override suspend fun getStudentsByIds(studentIds: List<Long>): List<Student> {
+        if (studentIds.isEmpty()) return emptyList()
+        return studentDao.getStudentsByIdsWithStatus(studentIds).map { Student.fromEntity(it) }
+    }
+    
+    override suspend fun getStudentsWithBalanceForSession(
+        sessionId: Long, 
+        feeRepository: com.navoditpublic.fees.domain.repository.FeeRepository
+    ): List<StudentWithBalance> {
+        // Get all student IDs who have entries in this session
+        val studentIds = feeRepository.getStudentIdsWithEntriesInSession(sessionId)
+        if (studentIds.isEmpty()) return emptyList()
+        
+        // Load the students
+        val students = studentDao.getStudentsByIdsWithStatus(studentIds).map { Student.fromEntity(it) }
+        
+        // Get balance for each student (current balance, not session-specific)
+        return students.map { student ->
+            val balance = feeRepository.getCurrentBalance(student.id)
+            StudentWithBalance(student, balance)
+        }
+    }
+    
     // ========== Individual Student Status Management ==========
     
     override suspend fun markInactive(studentId: Long): Result<Unit> = runCatching {

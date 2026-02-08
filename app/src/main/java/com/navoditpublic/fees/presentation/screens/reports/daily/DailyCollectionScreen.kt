@@ -85,6 +85,7 @@ import androidx.navigation.NavController
 import com.navoditpublic.fees.data.local.entity.PaymentMode
 import com.navoditpublic.fees.presentation.components.EmptyState
 import com.navoditpublic.fees.presentation.components.LoadingScreen
+import com.navoditpublic.fees.presentation.components.SessionBannerCompact
 import com.navoditpublic.fees.presentation.navigation.Screen
 import com.navoditpublic.fees.presentation.theme.*
 import com.navoditpublic.fees.util.ExcelGenerator
@@ -258,6 +259,17 @@ fun DailyCollectionScreen(
                         onlineCount = state.onlineCount,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
+                }
+                
+                // Session Banner (when viewing historical session)
+                if (!state.isViewingCurrentSession && state.selectedSessionInfo != null) {
+                    item {
+                        SessionBannerCompact(
+                            sessionInfo = state.selectedSessionInfo,
+                            onSwitchClick = { navController.navigate(Screen.AcademicSessions.route) },
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                 }
                 
                 // Filter & Sort Section
